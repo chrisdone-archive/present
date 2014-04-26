@@ -18,11 +18,11 @@ The data type can be queried like this:
 ``` haskell
 > let x = (Foo (Bar () True) [(Bar () True),(Bar () False)] 'a' 5)
 > present (fromJust (fromList [0])) x
-Just (Alg "Foo" [@0→0,@0→1,@0→2,@0→3])
+Just (Alg "Foo" ["@0→0","@0→1","@0→2","@0→3"])
 > present (fromJust (fromList [0,1])) x
-Just (Alg "(:)" [@0→1→0,@0→1→1])
+Just (Alg "(:)" ["@0→1→0","@0→1→1"])
 > present (fromJust (fromList [0,1,0])) x
-Just (Alg "Bar" [@0→1→0→0,@0→1→0→1])
+Just (Alg "Bar" ["@0→1→0→0","@0→1→0→1"])
 > present (fromJust (fromList [0,1,0,0])) x
 Just (Alg "()" [])
 > present (fromJust (fromList [0,1,0,1])) x
@@ -39,11 +39,11 @@ Data structures are also be unpacked lazily.
 
 ``` haskell
 > present (fromJust (fromList [0])) [1..]
-Just (Alg "(:)" [@0→0,@0→1])
+Just (Alg "(:)" ["@0→0","@0→1"])
 > present (fromJust (fromList [0,0])) [1..]
 Just (Integer "1")
 > present (fromJust (fromList [0,1])) [1..]
-Just (Alg "(:)" [@0→1→0,@0→1→1])
+Just (Alg "(:)" ["@0→1→0","@0→1→1"])
 > present (fromJust (fromList [0,1,0])) [1..]
 Just (Integer "2")
 > present (fromJust (fromList [0,1,1,0])) [1..]
