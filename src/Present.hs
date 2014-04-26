@@ -47,7 +47,7 @@ instance ToLisp Presentation where
               ,"text" .: t
               ,"slots" .: toLisp (map toLisp slots)]
     where name .: slot = (Symbol name,toLisp slot)
-          assoc = toLisp . concatMap (\(sym,val) -> [sym,val])
+          assoc = toLisp
 
 -- | Present the breadth-first level of a data type.
 present :: Data a => ID -> a -> Maybe Presentation
