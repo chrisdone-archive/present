@@ -81,10 +81,14 @@ Just (Integer "2045")
 
 Support for JSON:
 
+``` haskell
 > fmap Data.Aeson.encode (present (fromJust (fromList [0])) (Foo (Bar () True) [] 'a' 6))
 Just (Chunk "{\"slots\":[[0,0],[0,1],[0,2],[0,3]],\"text\":\"Foo\",\"type\":\"alg\"}" Empty)
+```
 
 And for s-expressions (Emacs):
 
+``` haskell
 > fmap Data.AttoLisp.encode (present (fromJust (fromList [0])) (Foo (Bar () True) [] 'a' 6))
 Just (Chunk "(type \"alg\" text \"Foo\" slots ((0 0) (0 1) (0 2) (0 3)))" Empty)
+```
