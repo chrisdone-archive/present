@@ -6,8 +6,8 @@
 
 module Present where
 
-import           Data.Aeson
-import           Data.AttoLisp
+import           Data.Aeson (ToJSON(..),(.=),object)
+import           Data.AttoLisp (ToLisp(..),Lisp(Symbol))
 import           Data.Data
 import           Data.Data.Exists
 import           Data.Data.Indexed
@@ -15,36 +15,65 @@ import           Data.Default
 import           Data.ID (ID)
 import qualified Data.ID as ID
 import           Data.Semigroup
-import           Data.Text (Text,pack)
+import           Data.Text (Text,pack,isPrefixOf)
 
 -- | A presentation of a level of a data type.
 data Presentation
-  = Integer !Text
-  | Floating !Text
-  | Char !Text
-  | Alg !Text ![ID]
+  = Integer !Text !Text
+  | Floating !Text !Text
+  | Char !Text !Text
+  | Alg !Text !Text ![(Text,ID)]
+  | Tuple !Text ![(Text,ID)]
+  | List !Text ![(Text,ID)]
+  | String !Text ![(Text,ID)]
   deriving (Show,Typeable,Data)
 
 instance ToJSON Presentation where
   toJSON x =
     case x of
-      Integer i -> object ["type" .= ("integer" :: Text),"text" .= i]
-      Floating f -> object ["type" .= ("floating" :: Text),"text" .= f]
-      Char c -> object ["type" .= ("char" :: Text),"text" .= c]
-      Alg t slots ->
-        object ["type" .= ("alg" :: Text)
+      Integer ty i -> object ["rep" .= ("integer" :: Text),"type" .= ty,"text" .= i]
+      Floating ty f -> object ["rep" .= ("floating" :: Text),"type" .= ty,"text" .= f]
+      Char ty c -> object ["rep" .= ("char" :: Text),"type" .= ty,"text" .= c]
+      Alg ty t slots ->
+        object ["rep" .= ("alg" :: Text)
+               ,"type" .= ty
                ,"text" .= t
+               ,"slots" .= toJSON (map toJSON slots)]
+      Tuple ty slots ->
+        object ["rep" .= ("tuple" :: Text)
+               ,"type" .= ty
+               ,"slots" .= toJSON (map toJSON slots)]
+      List ty slots ->
+        object ["rep" .= ("list" :: Text)
+               ,"type" .= ty
+               ,"slots" .= toJSON (map toJSON slots)]
+      String ty slots ->
+        object ["rep" .= ("string" :: Text)
+               ,"type" .= ty
                ,"slots" .= toJSON (map toJSON slots)]
 
 instance ToLisp Presentation where
   toLisp x =
     case x of
-      Integer i -> assoc ["type" .: ("integer" :: Text),"text" .: i]
-      Floating f -> assoc ["type" .: ("floating" :: Text),"text" .: f]
-      Char c -> assoc ["type" .: ("char" :: Text),"text" .: c]
-      Alg t slots ->
-        assoc ["type" .: ("alg" :: Text)
+      Integer ty i -> assoc ["rep" .: ("integer" :: Text),"type" .: ty,"text" .: i]
+      Floating ty f -> assoc ["rep" .: ("floating" :: Text),"type" .: ty,"text" .: f]
+      Char ty c -> assoc ["rep" .: ("char" :: Text),"type" .: ty,"text" .: c]
+      Alg ty t slots ->
+        assoc ["rep" .: ("alg" :: Text)
+              ,"type" .: ty
               ,"text" .: t
+              ,"slots" .: toLisp (map toLisp slots)]
+      Tuple ty slots ->
+        assoc ["rep" .: ("tuple" :: Text)
+              ,"type" .: ty
+              ,"slots" .: toLisp (map toLisp slots)]
+      List ty slots ->
+        assoc ["rep" .: ("list" :: Text)
+              ,"type" .: ty
+              ,"slots" .: toLisp (map toLisp slots)]
+      String ty slots ->
+        assoc ["rep" .: ("string" :: Text)
+              ,"type" .: ty
               ,"slots" .: toLisp (map toLisp slots)]
     where name .: slot = (Symbol name,toLisp slot)
           assoc = toLisp
@@ -74,17 +103,26 @@ presentation :: Data a => ID -> a -> Maybe Presentation
 presentation iq d =
   case dataTypeRep dtype of
     AlgRep{} ->
-      Just (Alg (pack (show (toConstr d)))
-                (gappend (const (return . (iq <>) . ID.singleton)) d))
-    IntRep -> Just (Integer text)
-    FloatRep -> Just (Floating text)
-    CharRep -> Just (Char text)
+      Just (if ty == "[Char]" || ty == "String"
+               then String ty ids
+               else if isPrefixOf "[" ty
+                       then List ty ids
+                       else if isPrefixOf "(" ty
+                               then Tuple ty ids
+                               else Alg ty text ids )
+      where text = pack (show (toConstr d))
+            ids = gappend (\d i -> return (pack (show (typeOf d))
+                                          ,iq <> ID.singleton i))
+                          d
+    IntRep -> Just (Integer ty text)
+    FloatRep -> Just (Floating ty text)
+    CharRep -> Just (Char ty text)
     NoRep -> Nothing
   where text = pack (show (toConstr d))
+        ty = pack (show (typeOf d))
         dtype = dataTypeOf d
 
-data Foo = Foo Bar [Bar] Char Int
-  deriving (Typeable,Data)
-
-data Bar = Bar () Bool
-  deriving (Typeable,Data)
+-- | A helpful function for editors to force that a value is an
+-- instance of "Data", before we actually start using it.
+asData :: Data a => a -> a
+asData = id
