@@ -64,10 +64,10 @@ ack :: (Eq a1, Eq a, Num a1, Num a) => a -> a1 -> a1
 > let xs = [ack 3 8,4]
 (0.00 secs, 1492080 bytes)
 > present (fromJust (fromList [0])) xs
-Just (Alg "(:)" ["@0\8594\&0","@0\8594\&1"])
+Just (Alg "(:)" ["@0→0","@0→1"])
 (0.00 secs, 1984104 bytes)
 > present (fromJust (fromList [0,1])) xs
-Just (Alg "(:)" ["@0\8594\&1\8594\&0","@0\8594\&1\8594\&1"])
+Just (Alg "(:)" ["@0→1→0","@0→1→1"])
 (0.00 secs, 990528 bytes)
 > present (fromJust (fromList [0,1,0])) xs
 Just (Integer "4")
