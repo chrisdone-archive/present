@@ -59,10 +59,7 @@ of it once, subsequent calls will be immediate.
 
 ``` haskell
 > let ack 0 n = n+1; ack m 0 = ack (m-1) 1; ack m n = ack (m-1) (ack m (n-1))
-ack :: (Eq a1, Eq a, Num a1, Num a) => a -> a1 -> a1
-(0.00 secs, 2487256 bytes)
 > let xs = [ack 3 8,4]
-(0.00 secs, 1492080 bytes)
 > present (fromJust (fromList [0])) xs
 Just (Alg "(:)" ["@0→0","@0→1"])
 (0.00 secs, 1984104 bytes)
