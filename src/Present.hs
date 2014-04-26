@@ -1,7 +1,13 @@
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DeriveGeneric #-}
+
 -- | Make presentations for data types.
 
 module Present where
 
+import           Data.Aeson
+import           Data.AttoLisp
 import           Data.Data
 import           Data.Data.Exists
 import           Data.Data.Indexed
@@ -17,7 +23,31 @@ data Presentation
   | Floating !Text
   | Char !Text
   | Alg !Text ![ID]
-  deriving (Show)
+  deriving (Show,Typeable,Data)
+
+instance ToJSON Presentation where
+  toJSON x =
+    case x of
+      Integer i -> object ["type" .= ("integer" :: Text),"text" .= i]
+      Floating f -> object ["type" .= ("floating" :: Text),"text" .= f]
+      Char c -> object ["type" .= ("char" :: Text),"text" .= c]
+      Alg t slots ->
+        object ["type" .= ("alg" :: Text)
+               ,"text" .= t
+               ,"slots" .= toJSON (map toJSON slots)]
+
+instance ToLisp Presentation where
+  toLisp x =
+    case x of
+      Integer i -> assoc ["type" .: ("integer" :: Text),"text" .: i]
+      Floating f -> assoc ["type" .: ("floating" :: Text),"text" .: f]
+      Char c -> assoc ["type" .: ("char" :: Text),"text" .: c]
+      Alg t slots ->
+        assoc ["type" .: ("alg" :: Text)
+              ,"text" .: t
+              ,"slots" .: toLisp (map toLisp slots)]
+    where name .: slot = (Symbol name,toLisp slot)
+          assoc = toLisp . concatMap (\(sym,val) -> [sym,val])
 
 -- | Present the breadth-first level of a data type.
 present :: Data a => ID -> a -> Maybe Presentation
@@ -52,3 +82,9 @@ presentation iq d =
     NoRep -> Nothing
   where text = pack (show (toConstr d))
         dtype = dataTypeOf d
+
+data Foo = Foo Bar [Bar] Char Int
+  deriving (Typeable,Data)
+
+data Bar = Bar () Bool
+  deriving (Typeable,Data)

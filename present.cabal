@@ -19,4 +19,6 @@ library
                      text,
                      semigroups,
                      data-default,
-                     mtl
+                     mtl,
+                     aeson,
+                     atto-lisp

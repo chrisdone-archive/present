@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 -- | ID library
@@ -11,6 +12,9 @@ module Data.ID
   ,snoc)
   where
 
+import           Data.Aeson
+import           Data.AttoLisp
+import           Data.Data
 import           Data.Default
 import           Data.List
 import           Data.List.NonEmpty (NonEmpty(..))
@@ -19,13 +23,19 @@ import           Data.Semigroup
 
 newtype ID =
   ID (NonEmpty Integer)
-  deriving (Eq,Semigroup)
+  deriving (Eq,Semigroup,Data,Typeable)
+
+instance ToJSON ID where
+  toJSON (ID (x :| xs)) = toJSON (x : xs)
+
+instance ToLisp ID where
+  toLisp (ID (x :| xs)) = toLisp (x : xs)
 
 instance Default ID where
   def = singleton 0
 
 instance Show ID where
-  show (ID (x :| xs)) = show ("@" ++ intercalate "→" (map show (x : xs)))
+  show (ID (x :| xs)) = "@" ++ intercalate "→" (map show (x : xs))
 
 -- | Split off the first parent from the ID.
 split :: ID -> (Integer,Maybe ID)
