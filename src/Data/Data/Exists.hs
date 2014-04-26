@@ -2,7 +2,9 @@
 
 -- | An existential wrapper for data.
 
-module Data.Data.Exists where
+module Data.Data.Exists
+  (D(..))
+  where
 
 import Data.Data
 

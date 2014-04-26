@@ -9,11 +9,12 @@ module Data.Data.Indexed
   ,gappend)
   where
 
-import Control.Monad.State
-import Control.Monad.Writer
-import Data.Data
-import Data.Data.Exists
-import Data.Maybe
+import           Control.Monad
+import           Control.Monad.State
+import           Control.Monad.Writer
+import           Data.Data
+import           Data.Data.Exists
+import           Data.Maybe
 
 -- | Map over a data type tracking some number index.
 gmapI :: (Data a, Num i,MonadState i m)
