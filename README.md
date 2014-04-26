@@ -89,6 +89,6 @@ Just (Chunk "{\"slots\":[[0,0],[0,1],[0,2],[0,3]],\"text\":\"Foo\",\"type\":\"al
 And for s-expressions (Emacs):
 
 ``` haskell
-λ> fmap Data.AttoLisp.encode (present (fromJust (fromList [0])) (Foo (Bar () True) [] 'a' 6))
+> fmap Data.AttoLisp.encode (present (fromJust (fromList [0])) (Foo (Bar () True) [] 'a' 6))
 Just (Chunk "((type \"alg\") (text \"Foo\") (slots ((0 0) (0 1) (0 2) (0 3))))" Empty)
 ```
