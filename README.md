@@ -37,7 +37,7 @@ Just (Integer "Int" "5")
 
 ### Lazy infinite data structures
 
-Data structures are also be unpacked lazily.
+Data structures can also be unpacked lazily.
 
 ``` haskell
 > present (fromJust (fromList [0])) [1..]
