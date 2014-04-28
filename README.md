@@ -6,31 +6,33 @@ Make presentations for data types.
 ### Breadth-first unpacking of data structures
 
 ``` haskell
-data Foo = Foo Bar [Bar] Char Int
-  deriving (Typeable,Data)
-
-data Bar = Bar () Bool
-  deriving (Typeable,Data)
+> import Data.Maybe
+> import Data.Data
+> import Data.Typeable
+> import Data.ID
+> :set -XDeriveDataTypeable
+> data Bar = Bar () Bool deriving (Typeable,Data)
+> data Foo = Foo Bar [Bar] Char Int deriving (Typeable,Data)
 ```
 
 The data type can be queried like this:
 
 ``` haskell
-> let x = (Foo (Bar () True) [(Bar () True),(Bar () False)] 'a' 5)
+> let x = Foo (Bar () True) [(Bar () True),(Bar () False)] 'a' 5
 > present (fromJust (fromList [0])) x
-Just (Alg "Foo" ["@0→0","@0→1","@0→2","@0→3"])
+Just (Alg "Foo" "Foo" [("Bar","@0→0"),("[Bar]","@0→1"),("Char","@0→2"),("Int","@0→3")])
 > present (fromJust (fromList [0,1])) x
-Just (Alg "(:)" ["@0→1→0","@0→1→1"])
+Just (List "[Bar]" [("Bar","@0→1→0"),("[Bar]","@0→1→1")])
 > present (fromJust (fromList [0,1,0])) x
-Just (Alg "Bar" ["@0→1→0→0","@0→1→0→1"])
+Just (Alg "Bar" "Bar" [("()","@0→1→0→0"),("Bool","@0→1→0→1")])
 > present (fromJust (fromList [0,1,0,0])) x
-Just (Alg "()" [])
+Just (Tuple "()" [])
 > present (fromJust (fromList [0,1,0,1])) x
-Just (Alg "True" [])
+Just (Alg "Bool" "True" [])
 > present (fromJust (fromList [0,2])) x
-Just (Char "'a'")
+Just (Char "Char" "'a'")
 > present (fromJust (fromList [0,3])) x
-Just (Integer "5")
+Just (Integer "Int" "5")
 ```
 
 ### Lazy infinite data structures
@@ -39,17 +41,17 @@ Data structures are also be unpacked lazily.
 
 ``` haskell
 > present (fromJust (fromList [0])) [1..]
-Just (Alg "(:)" ["@0→0","@0→1"])
+Just (List "[Integer]" [("Integer","@0→0"),("[Integer]","@0→1")])
 > present (fromJust (fromList [0,0])) [1..]
-Just (Integer "1")
+Just (Integer "Integer" "1")
 > present (fromJust (fromList [0,1])) [1..]
-Just (Alg "(:)" ["@0→1→0","@0→1→1"])
+Just (List "[Integer]" [("Integer","@0→1→0"),("[Integer]","@0→1→1")])
 > present (fromJust (fromList [0,1,0])) [1..]
-Just (Integer "2")
+Just (Integer "Integer" "2")
 > present (fromJust (fromList [0,1,1,0])) [1..]
-Just (Integer "3")
+Just (Integer "Integer" "3")
 > present (fromJust (fromList [0,1,1,1,0])) [1..]
-Just (Integer "4")
+Just (Integer "Integer" "4")
 ```
 
 ## Lazy memoization
@@ -60,21 +62,22 @@ of it once, subsequent calls will be immediate.
 ``` haskell
 > let ack 0 n = n+1; ack m 0 = ack (m-1) 1; ack m n = ack (m-1) (ack m (n-1))
 > let xs = [ack 3 8,4]
+> :set +s
 > present (fromJust (fromList [0])) xs
-Just (Alg "(:)" ["@0→0","@0→1"])
-(0.00 secs, 1984104 bytes)
+Just (List "[Integer]" [("Integer","@0→0"),("[Integer]","@0→1")])
+(0.00 secs, 1036760 bytes)
 > present (fromJust (fromList [0,1])) xs
-Just (Alg "(:)" ["@0→1→0","@0→1→1"])
-(0.00 secs, 990528 bytes)
+Just (List "[Integer]" [("Integer","@0→1→0"),("[Integer]","@0→1→1")])
+(0.00 secs, 1032432 bytes)
 > present (fromJust (fromList [0,1,0])) xs
-Just (Integer "4")
-(0.00 secs, 1028944 bytes)
+Just (Integer "Integer" "4")
+(0.00 secs, 1036616 bytes)
 > present (fromJust (fromList [0,0])) xs
-Just (Integer "2045")
-(2.21 secs, 802929136 bytes)
+Just (Integer "Integer" "2045")
+(2.19 secs, 802705112 bytes)
 > present (fromJust (fromList [0,0])) xs
-Just (Integer "2045")
-(0.00 secs, 1030392 bytes)
+Just (Integer "Integer" "2045")
+(0.00 secs, 1031616 bytes)
 ```
 
 ## Representations for common editor-compatible formats
@@ -83,12 +86,16 @@ Support for JSON:
 
 ``` haskell
 > fmap Data.Aeson.encode (present (fromJust (fromList [0])) (Foo (Bar () True) [] 'a' 6))
-Just (Chunk "{\"slots\":[[0,0],[0,1],[0,2],[0,3]],\"text\":\"Foo\",\"type\":\"alg\"}" Empty)
+Just (Chunk "{\"slots\":[[\"Bar\",[0,0]],[\"[Bar]\",[0,1]],
+[\"Char\",[0,2]],[\"Int\",[0,3]]],\"text\":\"Foo\",
+\"rep\":\"alg\",\"type\":\"Foo\"}" Empty)
 ```
 
 And for s-expressions (Emacs):
 
 ``` haskell
 > fmap Data.AttoLisp.encode (present (fromJust (fromList [0])) (Foo (Bar () True) [] 'a' 6))
-Just (Chunk "((type \"alg\") (text \"Foo\") (slots ((0 0) (0 1) (0 2) (0 3))))" Empty)
+Just (Chunk "((rep \"alg\") (type \"Foo\") (text \"Foo\")
+(slots ((\"Bar\" (0 0)) (\"[Bar]\" (0 1))
+(\"Char\" (0 2)) (\"Int\" (0 3)))))" Empty)
 ```
