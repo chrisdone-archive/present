@@ -61,23 +61,18 @@ of it once, subsequent calls will be immediate.
 
 ``` haskell
 > let ack 0 n = n+1; ack m 0 = ack (m-1) 1; ack m n = ack (m-1) (ack m (n-1))
-> let xs = [ack 3 8,4]
 > :set +s
+> let x = ack 3 8; xs = [x,x]
+(0.00 secs, 1028952 bytes)
 > present (fromJust (fromList [0])) xs
 Just (List "[Integer]" [("Integer","@0→0"),("[Integer]","@0→1")])
-(0.00 secs, 1036760 bytes)
-> present (fromJust (fromList [0,1])) xs
-Just (List "[Integer]" [("Integer","@0→1→0"),("[Integer]","@0→1→1")])
-(0.00 secs, 1032432 bytes)
+(0.00 secs, 1035472 bytes)
+> present (fromJust (fromList [0,0])) xs
+Just (Integer "Integer" "2045")
+(2.20 secs, 803045032 bytes)
 > present (fromJust (fromList [0,1,0])) xs
-Just (Integer "Integer" "4")
-(0.00 secs, 1036616 bytes)
-> present (fromJust (fromList [0,0])) xs
 Just (Integer "Integer" "2045")
-(2.19 secs, 802705112 bytes)
-> present (fromJust (fromList [0,0])) xs
-Just (Integer "Integer" "2045")
-(0.00 secs, 1031616 bytes)
+(0.00 secs, 1070976 bytes)
 ```
 
 ## Representations for common editor-compatible formats
