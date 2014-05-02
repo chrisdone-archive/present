@@ -6,7 +6,6 @@ module Present.ByteString where
 
 import qualified Data.ByteString as S
 import qualified Data.ByteString.Lazy as L
-import           Data.Char
 import           Data.Data
 
 -- | Normalize a strict Data.ByteString to a simple type.

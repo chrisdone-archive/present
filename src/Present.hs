@@ -33,8 +33,6 @@ present :: Data a => ID -> a -> Maybe Presentation
 present iq =
   hunt iq def iq
 
-data Normalizer = forall d. Data d => Norm d
-
 -- | Hunt through the data structure, normalizing special data types
 -- like Text and ByteString and String.
 hunt :: Data d => ID -> ID -> ID -> d -> Maybe Presentation
@@ -98,12 +96,15 @@ presentAlgebraic iq d =
       case cast d of
         Just (_ :: P.Text) -> String ty ids
         Nothing ->
-          case show (toConstr d) of
-            "[]"  -> List ty []
-            "()"  -> Tuple ty []
-            "(:)" -> List ty ids
-            "(,)" -> Tuple ty ids
-            _     -> Alg ty text ids
+          case cast d of
+            Just (_ :: P.ByteString) -> String ty ids
+            Nothing ->
+              case show (toConstr d) of
+                "[]"  -> List ty []
+                "()"  -> Tuple ty []
+                "(:)" -> List ty ids
+                "(,)" -> Tuple ty ids
+                _     -> Alg ty text ids
   where ty = pack (show (typeOf d))
         text = pack (show (toConstr d))
         ids = gappend makeId d
