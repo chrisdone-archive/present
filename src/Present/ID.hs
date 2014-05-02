@@ -1,9 +1,9 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
--- | ID library
+-- | ID library.
 
-module Data.ID
+module Present.ID
   (ID
   ,split
   ,fromList
