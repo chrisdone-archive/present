@@ -1,3 +1,4 @@
+{-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE DeriveDataTypeable #-}
@@ -15,6 +16,7 @@ module Present
 
 import qualified Present.String as P
 import qualified Present.Text as P
+import qualified Present.ByteString as P
 import           Present.Types
 
 import           Data.Data
@@ -29,33 +31,49 @@ import           Data.Text (pack)
 -- | Present the breadth-first level of a data type.
 present :: Data a => ID -> a -> Maybe Presentation
 present iq =
-  hunt def iq
-  where
-    hunt :: Data d => ID -> ID -> d -> Maybe Presentation
-    hunt c q d =
+  hunt iq def iq
+
+data Normalizer = forall d. Data d => Norm d
+
+-- | Hunt through the data structure, normalizing special data types
+-- like Text and ByteString and String.
+hunt :: Data d => ID -> ID -> ID -> d -> Maybe Presentation
+hunt iq c q d =
+  -- There is a pattern here which can be abstracted.
+  case cast d of
+    Just t -> retry (P.normalizeText t)
+    Nothing ->
       case cast d of
-        Just t -> hunt c q (P.normalizeText t)
+        Just s -> retry (P.normalizeStrictText s)
         Nothing ->
           case cast d of
-            Just s -> hunt c q (P.normalizeStrictText s)
+            Just b -> retry (P.normalizeByteString b)
             Nothing ->
               case cast d of
-                Just s -> hunt c q (P.normalizeString s)
-                Nothing -> dissect c q d
-    dissect :: Data d => ID -> ID -> d -> Maybe Presentation
-    dissect c q d =
-      case ID.split q of
-        (i,Nothing) ->
-          if ID.singleton i == c
-             then presentation iq d
-             else Nothing
-        (i,Just q') ->
-          if ID.singleton i == c
-             then case gindex i' d of
-                    Nothing -> Nothing
-                    Just (D d') -> hunt (ID.singleton i') q' d'
-             else Nothing
-             where (i',_) = ID.split q'
+                Just b -> retry (P.normalizeStrictByteString b)
+                Nothing ->
+                  case cast d of
+                    Just s -> retry (P.normalizeString s)
+                    Nothing -> dissect iq c q d
+  where retry :: Data r => r -> Maybe Presentation
+        retry = hunt iq c q
+
+-- | Dissect the actual data structure and find and present the slot
+-- we're looking for.
+dissect :: Data d => ID -> ID -> ID -> d -> Maybe Presentation
+dissect iq c q d =
+  case ID.split q of
+    (i,Nothing) ->
+      if ID.singleton i == c
+         then presentation iq d
+         else Nothing
+    (i,Just q') ->
+      if ID.singleton i == c
+         then case gindex i' d of
+                Nothing -> Nothing
+                Just (D d') -> hunt iq (ID.singleton i') q' d'
+         else Nothing
+         where (i',_) = ID.split q'
 
 -- | Make a presentation for the given data structure.
 presentation :: Data a => ID -> a -> Maybe Presentation
