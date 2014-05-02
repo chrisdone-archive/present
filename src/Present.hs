@@ -1,9 +1,6 @@
-{-# LANGUAGE ExistentialQuantification #-}
-{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE DeriveGeneric #-}
 
 -- | Make presentations for data types.
 
@@ -14,47 +11,49 @@ module Present
   ,asData)
   where
 
+import qualified Present.ByteString as P
+import           Present.ID (ID)
+import qualified Present.ID as ID
 import qualified Present.String as P
 import qualified Present.Text as P
-import qualified Present.ByteString as P
 import           Present.Types
 
+import           Control.Applicative ((<|>))
+import           Control.Monad
 import           Data.Data
 import           Data.Data.Exists
 import           Data.Data.Indexed
 import           Data.Default
-import           Present.ID (ID)
-import qualified Present.ID as ID
 import           Data.Semigroup
 import           Data.Text (pack)
 
+-- | Normalize real types into presentation types.
+data Normalizer = forall a b. (Data a,Data b) => Norm (a -> b)
+
 -- | Present the breadth-first level of a data type.
 present :: Data a => ID -> a -> Maybe Presentation
-present iq =
-  hunt iq def iq
+present iq = hunt iq def iq
 
 -- | Hunt through the data structure, normalizing special data types
 -- like Text and ByteString and String.
 hunt :: Data d => ID -> ID -> ID -> d -> Maybe Presentation
 hunt iq c q d =
-  -- There is a pattern here which can be abstracted.
-  case cast d of
-    Just t -> retry (P.normalizeText t)
-    Nothing ->
-      case cast d of
-        Just s -> retry (P.normalizeStrictText s)
-        Nothing ->
-          case cast d of
-            Just b -> retry (P.normalizeByteString b)
-            Nothing ->
-              case cast d of
-                Just b -> retry (P.normalizeStrictByteString b)
-                Nothing ->
-                  case cast d of
-                    Just s -> retry (P.normalizeString s)
-                    Nothing -> dissect iq c q d
-  where retry :: Data r => r -> Maybe Presentation
-        retry = hunt iq c q
+  normalize d normalizers <|> dissect iq c q d
+  where
+    normalize a = foldr mplus mzero . map (tryNormalize a)
+    tryNormalize x (Norm convert) = cast x >>= retry . convert
+    retry :: Data r => r -> Maybe Presentation
+    retry = hunt iq c q
+
+-- | Normalizers which convert from one more complicated type to a
+-- simpler, easier to present type.
+normalizers :: [Normalizer]
+normalizers =
+  [Norm P.normalizeText
+  ,Norm P.normalizeStrictText
+  ,Norm P.normalizeByteString
+  ,Norm P.normalizeStrictByteString
+  ,Norm P.normalizeString]
 
 -- | Dissect the actual data structure and find and present the slot
 -- we're looking for.
