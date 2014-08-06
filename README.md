@@ -1,4 +1,4 @@
-present
+present [![Hackage](https://img.shields.io/hackage/v/present.svg?style=flat)](https://hackage.haskell.org/package/present)
 =====
 
 Make presentations for data types.
