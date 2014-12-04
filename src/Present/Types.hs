@@ -38,7 +38,7 @@ instance ToJSON Presentation where
                ,"text" .= t
                ,"slots" .= toJSON (map toJSON slots)]
       Record ty t slots ->
-        object ["rep" .= ("alg" :: Text)
+        object ["rep" .= ("record" :: Text)
                ,"type" .= ty
                ,"text" .= t
                ,"slots" .= toJSON (map toJSON slots)]
@@ -67,7 +67,7 @@ instance ToLisp Presentation where
               ,"text" .: t
               ,"slots" .: toLisp (map toLisp slots)]
       Record ty t slots ->
-        assoc ["rep" .: ("alg" :: Text)
+        assoc ["rep" .: ("record" :: Text)
               ,"type" .: ty
               ,"text" .: t
               ,"slots" .: toLisp (map toLisp slots)]
