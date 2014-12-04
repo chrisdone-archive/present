@@ -20,6 +20,7 @@ data Presentation
   | Floating !Text !Text
   | Char !Text !Text
   | Alg !Text !Text ![(Text,ID)]
+  | Record !Text !Text ![(Text,(Text,ID))]
   | Tuple !Text ![(Text,ID)]
   | List !Text ![(Text,ID)]
   | String !Text ![(Text,ID)]

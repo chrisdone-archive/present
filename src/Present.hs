@@ -103,7 +103,10 @@ presentAlgebraic iq d =
                 "()"  -> Tuple ty []
                 "(:)" -> List ty ids
                 "(,)" -> Tuple ty ids
-                _     -> Alg ty text ids
+                _ ->
+                  case constrFields (toConstr d) of
+                    [] -> Alg ty text ids
+                    fields -> Record ty text (zip (map pack fields) ids)
   where ty = pack (show (typeOf d))
         text = pack (show (toConstr d))
         ids = gappend makeId d
