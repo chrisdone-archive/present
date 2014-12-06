@@ -1,1 +1,5 @@
 :set -isrc -hide-package monads-tf
+:set -XTemplateHaskell
+:set -fbyte-code
+:set -fbyte-code
+:set -hide-package text-1.2.0.0

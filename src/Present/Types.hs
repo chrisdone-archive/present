@@ -1,87 +1,61 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 -- | Presentation types.
 
 module Present.Types
-  (Presentation(..))
+  (Present(..)
+  ,Presentation(..)
+  ,Type(..)
+  ,Field(..)
+  ,Constructor(..)
+  ,Cursor(..))
   where
 
-import Present.ID (ID)
-
-import Data.Aeson (ToJSON(..),(.=),object)
-import Data.AttoLisp (ToLisp(..),Lisp(Symbol))
-import Data.Data
+import Data.Monoid
+import Data.Proxy
+import Data.String
 import Data.Text (Text)
+
+-- | Things which can be presented in a uniform manner.
+class Present a where
+  presentValue :: Cursor -> Cursor -> a -> Presentation
+  presentType :: Proxy a -> Type
+
+-- | A type's display.
+newtype Type =
+  Type {typeText :: Text}
+  deriving (IsString,Monoid,Show)
+
+-- | A field name.
+newtype Field = Field { fieldText :: Text }
+  deriving (Show)
+
+-- | A constructor name.
+newtype Constructor = Constructor { constructorName :: Text }
+  deriving (Show,IsString)
+
+-- | A cursor into a data structure.
+newtype Cursor = Cursor { cursorInts :: [Integer] }
+  deriving (Monoid,Show)
 
 -- | A presentation of a level of a data type.
 data Presentation
-  = Integer !Text !Text
-  | Floating !Text !Text
-  | Char !Text !Text
-  | Alg !Text !Text ![(Text,ID)]
-  | Record !Text !Text ![(Text,(Text,ID))]
-  | Tuple !Text ![(Text,ID)]
-  | List !Text ![(Text,ID)]
-  | String !Text ![(Text,ID)]
-  deriving (Show,Typeable,Data)
-
-instance ToJSON Presentation where
-  toJSON x =
-    case x of
-      Integer ty i -> object ["rep" .= ("integer" :: Text),"type" .= ty,"text" .= i]
-      Floating ty f -> object ["rep" .= ("floating" :: Text),"type" .= ty,"text" .= f]
-      Char ty c -> object ["rep" .= ("char" :: Text),"type" .= ty,"text" .= c]
-      Alg ty t slots ->
-        object ["rep" .= ("alg" :: Text)
-               ,"type" .= ty
-               ,"text" .= t
-               ,"slots" .= toJSON (map toJSON slots)]
-      Record ty t slots ->
-        object ["rep" .= ("record" :: Text)
-               ,"type" .= ty
-               ,"text" .= t
-               ,"slots" .= toJSON (map toJSON slots)]
-      Tuple ty slots ->
-        object ["rep" .= ("tuple" :: Text)
-               ,"type" .= ty
-               ,"slots" .= toJSON (map toJSON slots)]
-      List ty slots ->
-        object ["rep" .= ("list" :: Text)
-               ,"type" .= ty
-               ,"slots" .= toJSON (map toJSON slots)]
-      String ty slots ->
-        object ["rep" .= ("string" :: Text)
-               ,"type" .= ty
-               ,"slots" .= toJSON (map toJSON slots)]
-
-instance ToLisp Presentation where
-  toLisp x =
-    case x of
-      Integer ty i -> assoc ["rep" .: ("integer" :: Text),"type" .: ty,"text" .: i]
-      Floating ty f -> assoc ["rep" .: ("floating" :: Text),"type" .: ty,"text" .: f]
-      Char ty c -> assoc ["rep" .: ("char" :: Text),"type" .: ty,"text" .: c]
-      Alg ty t slots ->
-        assoc ["rep" .: ("alg" :: Text)
-              ,"type" .: ty
-              ,"text" .: t
-              ,"slots" .: toLisp (map toLisp slots)]
-      Record ty t slots ->
-        assoc ["rep" .: ("record" :: Text)
-              ,"type" .: ty
-              ,"text" .: t
-              ,"slots" .: toLisp (map toLisp slots)]
-      Tuple ty slots ->
-        assoc ["rep" .: ("tuple" :: Text)
-              ,"type" .: ty
-              ,"slots" .: toLisp (map toLisp slots)]
-      List ty slots ->
-        assoc ["rep" .: ("list" :: Text)
-              ,"type" .: ty
-              ,"slots" .: toLisp (map toLisp slots)]
-      String ty slots ->
-        assoc ["rep" .: ("string" :: Text)
-              ,"type" .: ty
-              ,"slots" .: toLisp (map toLisp slots)]
-    where name .: slot = (Symbol name,toLisp slot)
-          assoc = toLisp
+  = Integral !Type !Constructor
+  -- ^ An integral presentation (Int, Integer, etc.).
+  | Floating !Type !Constructor
+  -- ^ A floating point (Float, Double, etc.)
+  | Char !Type !Text
+  -- ^ A character presentation.
+  | String !Type !(Maybe ((Type,Cursor),(Type,Cursor)))
+  -- ^ A string presentation. Either empty or a head and a tail.
+  | Tuple !Type ![(Type,Cursor)]
+  -- ^ A tuple presentation of many differing types.
+  | List !Type !(Maybe ((Type,Cursor),(Type,Cursor)))
+  -- ^ A list presentation. Either empty or a head and a tail.
+  | Alg !Type !Constructor ![(Type,Cursor)]
+  -- ^ An algebraic data type with many types inside.
+  | Record !Type !Constructor ![(Field,(Type,Cursor))]
+  -- ^ A record data type with many named types inside.
+  deriving (Show)
