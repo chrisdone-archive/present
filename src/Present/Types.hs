@@ -5,7 +5,8 @@
 -- | Presentation types.
 
 module Present.Types
-  (Present(..)
+  (Mode(..)
+  ,Present(..)
   ,Presentation(..)
   ,Type(..)
   ,Field(..)
@@ -16,24 +17,37 @@ module Present.Types
 import Data.Monoid
 import Data.Proxy
 import Data.String
-import Data.Text (Text)
+
+-- | The presentation mode.
+data Mode
+  = Internal  -- ^ Show internal implementation of the data type e.g. @1 : 2 : []@.
+  | External  -- ^ Show an opaque external representation e.g. @[1,2,3]@.
+  deriving (Eq,Show)
 
 -- | Things which can be presented in a uniform manner.
 class Present a where
-  presentValue :: Cursor -> Cursor -> a -> Presentation
+  presentValue :: Mode
+               -> Cursor       -- ^ History of cursors.
+               -> Cursor       -- ^ Cursor to stop at.
+               -> a            -- ^ Value to present at the given cursor.
+               -> Presentation -- ^ A presentation for the value at the given cursor.
   presentType :: Proxy a -> Type
+  -- ^ Useful for container types which want to show the type of its
+  -- child types without needing a value. E.g. a list may have zero
+  -- elements, but with 'presentType' you have a convenient way to get
+  -- the type.
 
 -- | A type's display.
 newtype Type =
-  Type {typeText :: Text}
+  Type {typeString :: String}
   deriving (IsString,Monoid,Show)
 
 -- | A field name.
-newtype Field = Field { fieldText :: Text }
+newtype Field = Field { fieldString :: String }
   deriving (Show)
 
 -- | A constructor name.
-newtype Constructor = Constructor { constructorName :: Text }
+newtype Constructor = Constructor { constructorName :: String }
   deriving (Show,IsString)
 
 -- | A cursor into a data structure.
@@ -46,7 +60,7 @@ data Presentation
   -- ^ An integral presentation (Int, Integer, etc.).
   | Floating !Type !Constructor
   -- ^ A floating point (Float, Double, etc.)
-  | Char !Type !Text
+  | Char !Type !String
   -- ^ A character presentation.
   | String !Type !(Maybe ((Type,Cursor),(Type,Cursor)))
   -- ^ A string presentation. Either empty or a head and a tail.

@@ -1,17 +1,14 @@
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE DefaultSignatures #-}
 
 -- | Generate a @present@ function for a type.
 
 module Present.TH where
 
+import           Present.Types
+
 import           Data.Proxy
-import           Data.Text (Text)
-import qualified Data.Text as T
 import           Language.Haskell.TH as TH
 import           Prelude hiding (head)
-import           Present.Types
 
 -- | Make an instance for 'Present' for the given type.
 makePresent :: Name -> Q [Dec]
@@ -57,10 +54,11 @@ makePresentValue cons =
   let value = mkName "value"
       hierarchy = mkName "h"
       pid = mkName "pid"
+      mode = mkName "mode"
   in funD 'presentValue
-          [clause [varP hierarchy,varP pid,varP value]
+          [clause [varP mode,varP hierarchy,varP pid,varP value]
                   (normalB (caseE (varE value)
-                                  (map (makeAlt hierarchy value) cons)))
+                                  (map (makeAlt mode hierarchy value) cons)))
                   []]
 
 -- | Make the 'presentType' method.
@@ -71,8 +69,8 @@ makePresentType name vars =
                    then [wildP]
                    else [varP proxy])
                (normalB (appE (conE 'Type)
-                              (appE (varE 'T.unwords)
-                                    (appE [|map typeText|]
+                              (appE (varE 'unwords)
+                                    (appE [|map typeString|]
                                           (listE (litE (stringL (nameBase name)) :
                                                   map makeTyVarRep vars))))))
                []]
@@ -97,8 +95,8 @@ tyFun :: TypeQ
 tyFun = [t|(->)|]
 
 -- | Make the alt for presenting a constructor.
-makeAlt :: Name -> Name -> Con -> Q Match
-makeAlt h value (RecC name slots) =
+makeAlt :: Name -> Name -> Name -> Con -> Q Match
+makeAlt mode h value (RecC name slots) =
   match (conP name (map varP pvars))
         (normalB [|case $(varE (mkName "pid")) of
                      Cursor [] ->
@@ -119,7 +117,8 @@ makeAlt h value (RecC name slots) =
                                                    (match (if ij == fromIntegral (length pvars) - 1
                                                               then wildP
                                                               else litP (integerL ij))
-                                                          (normalB [|presentValue $(varE h)
+                                                          (normalB [|presentValue $(varE mode)
+                                                                                  $(varE h)
                                                                                   (Cursor j)
                                                                                   $(varE var)|])
                                                           []))
@@ -128,7 +127,7 @@ makeAlt h value (RecC name slots) =
         []
   where pvars = zipWith makeSlot [1 :: Integer ..] slots
         makeSlot x _ = mkName ("x" ++ show x)
-makeAlt h value (NormalC name slots) =
+makeAlt mode h value (NormalC name slots) =
   match (conP name (map varP pvars))
         (normalB [|case $(varE (mkName "pid")) of
                      Cursor [] ->
@@ -149,7 +148,8 @@ makeAlt h value (NormalC name slots) =
                                                    (match (if ij == fromIntegral (length pvars) - 1
                                                               then wildP
                                                               else litP (integerL ij))
-                                                          (normalB [|presentValue $(varE h)
+                                                          (normalB [|presentValue $(varE mode)
+                                                                                  $(varE h)
                                                                                   (Cursor j)
                                                                                   $(varE var)|])
                                                           []))
@@ -158,6 +158,6 @@ makeAlt h value (NormalC name slots) =
         []
   where pvars = zipWith makeSlot [1 :: Integer ..] slots
         makeSlot x _ = mkName ("x" ++ show x)
-makeAlt h value (InfixC slot1 name slot2) =
-  makeAlt h value (NormalC name [slot1,slot2])
-makeAlt _ _ c = error ("makePresent.makeAlt: Unexpected case: " ++ show c)
+makeAlt mode h value (InfixC slot1 name slot2) =
+  makeAlt mode h value (NormalC name [slot1,slot2])
+makeAlt _ _ _ c = error ("makePresent.makeAlt: Unexpected case: " ++ show c)
