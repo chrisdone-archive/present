@@ -8,32 +8,22 @@
 
 module Present.Instances where
 
-import           Present.TH
-import           Present.Types
+import Data.Int
+import Data.Word
+import Present.TH
+import Present.Types
 
-import           Data.Monoid
-import           Data.Proxy
+import Data.Monoid
+import Data.Proxy
 
 --------------------------------------------------------------------------------
 -- Flat types
 
-instance Present Int where
-  presentValue _mode _ _ i =
-    Integral (presentType (return i))
-             (Constructor (id (show i)))
-  presentType _ = "Int"
-
-instance Present Integer where
-  presentValue _mode _ _ i =
-    Integral (presentType (return i))
-             (Constructor (id (show i)))
-  presentType _ = "Integer"
-
 instance Present Char where
   presentValue _mode _ _ i =
     Char (presentType (return i))
-         (id (show i))
-  presentType _ = "Char"
+         i
+  presentType _ = ConT ''Char
 
 --------------------------------------------------------------------------------
 -- Container types
@@ -51,7 +41,7 @@ instance (Present a,Present b) => Present (a,b) where
     presentValue _mode h (Cursor j) x
   presentValue _mode h (Cursor (_:j)) (_,y) =
     presentValue _mode h (Cursor j) y
-  presentType p = "(" <> presentType px <> "," <> presentType py <> ")"
+  presentType p = AppT (AppT (TupleT 2)(presentType px)) (presentType py)
     where (px,py) = proxyTuple p
           proxyTuple :: Proxy (a,b) -> (Proxy a,Proxy b)
           proxyTuple _ = (Proxy,Proxy)
@@ -71,7 +61,7 @@ instance Present a => Present [a] where
           ty = presentType (proxyList (return xs))
           proxyList :: Proxy [a] -> Proxy a
           proxyList _ = Proxy
-  presentType p = "[" <> ty <> "]"
+  presentType p = AppT ListT ty
     where ty = presentType (proxyList p)
           proxyList :: Proxy [a] -> Proxy a
           proxyList _ = Proxy
@@ -79,4 +69,30 @@ instance Present a => Present [a] where
 --------------------------------------------------------------------------------
 -- Derivings
 
-$(makePresent ''Either)
+-- Basic Prelude sum types
+
+$(makeGenericPresent ''Either)
+$(makeGenericPresent ''Maybe)
+$(makeGenericPresent ''Bool)
+$(makeGenericPresent ''Ordering)
+
+-- Integrals
+
+$(makeIntegralPresent ''Integer)
+
+$(makeIntegralPresent ''Int)
+$(makeIntegralPresent ''Int8)
+$(makeIntegralPresent ''Int16)
+$(makeIntegralPresent ''Int32)
+$(makeIntegralPresent ''Int64)
+
+$(makeIntegralPresent ''Word)
+$(makeIntegralPresent ''Word8)
+$(makeIntegralPresent ''Word16)
+$(makeIntegralPresent ''Word32)
+$(makeIntegralPresent ''Word64)
+
+-- Floating
+
+$(makeDecimalPresent ''Float)
+$(makeDecimalPresent ''Double)

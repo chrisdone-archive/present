@@ -1,18 +1,42 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 -- | Generate a @present@ function for a type.
 
 module Present.TH where
 
-import           Present.Types
+import Present.Types
 
-import           Data.Proxy
-import           Language.Haskell.TH as TH
-import           Prelude hiding (head)
+import Data.Proxy
+import Language.Haskell.TH as TH
+import Language.Haskell.TH.Lift ()
+import Prelude hiding (head)
+
+-- -- | Make instances for all
+-- makePresents :: Type -> Q [Dec]
+-- makePresents
+
+-- | Make a 'Show'-based instance of 'Present' for decimals.
+makeDecimalPresent :: Name -> Q [Dec]
+makeDecimalPresent name =
+  [d|instance Present $(conT name) where
+       presentValue _mode _ _ i =
+         Decimal (presentType (return i))
+                 (show i)
+       presentType _ = ConT name|]
+
+-- | Make a 'Show'-based instance of 'Present' for integrals.
+makeIntegralPresent :: Name -> Q [Dec]
+makeIntegralPresent name =
+  [d|instance Present $(conT name) where
+       presentValue _mode _ _ i =
+         Integral (presentType (return i))
+                  (fromIntegral i)
+       presentType _ = ConT name|]
 
 -- | Make an instance for 'Present' for the given type.
-makePresent :: Name -> Q [Dec]
-makePresent name =
+makeGenericPresent :: Name -> Q [Dec]
+makeGenericPresent name =
   do info <- reify name
      case info of
        TyConI dec ->
@@ -68,11 +92,11 @@ makePresentType name vars =
        [clause (if null vars
                    then [wildP]
                    else [varP proxy])
-               (normalB (appE (conE 'Type)
-                              (appE (varE 'unwords)
-                                    (appE [|map typeString|]
-                                          (listE (litE (stringL (nameBase name)) :
-                                                  map makeTyVarRep vars))))))
+               (normalB (foldl (\x y ->
+                                  [|AppT $(x)
+                                         $(y)|])
+                               [|ConT name|]
+                               (map makeTyVarRep vars)))
                []]
   where proxy = mkName "proxy"
         makeTyVarRep var =
@@ -91,7 +115,7 @@ makePresentType name vars =
                               (varE proxy)))
 
 -- | Because I didn't see a better way anywhere.
-tyFun :: TypeQ
+tyFun :: Q Type
 tyFun = [t|(->)|]
 
 -- | Make the alt for presenting a constructor.
@@ -101,7 +125,7 @@ makeAlt mode h value (RecC name slots) =
         (normalB [|case $(varE (mkName "pid")) of
                      Cursor [] ->
                        Alg (presentType (return $(varE value)))
-                           $(litE (stringL (nameBase name)))
+                           name
                            $(listE (zipWith (\i var ->
                                                tupE [[|presentType (return $(varE var))|]
                                                     ,[|Cursor (return $(litE (integerL i)))|]])
@@ -111,10 +135,13 @@ makeAlt mode h value (RecC name slots) =
                        $(if null pvars
                             then [|error ("Unexpected case for Present: " ++
                                           $(litE (stringL (show name))) ++
-                                          "Index: " ++ show (i,j))|]
+                                          "Index: " ++
+                                          show (i,j))|]
                             else caseE [|i|]
                                        (zipWith (\ij var ->
-                                                   (match (if ij == fromIntegral (length pvars) - 1
+                                                   (match (if ij ==
+                                                              fromIntegral (length pvars) -
+                                                              1
                                                               then wildP
                                                               else litP (integerL ij))
                                                           (normalB [|presentValue $(varE mode)
@@ -125,14 +152,15 @@ makeAlt mode h value (RecC name slots) =
                                                 [0 ..]
                                                 pvars))|])
         []
-  where pvars = zipWith makeSlot [1 :: Integer ..] slots
-        makeSlot x _ = mkName ("x" ++ show x)
+  where pvars =
+          zipWith makeSlot [1 :: Integer ..] slots
+        makeSlot x _ = mkName ("slot" ++ show x)
 makeAlt mode h value (NormalC name slots) =
   match (conP name (map varP pvars))
         (normalB [|case $(varE (mkName "pid")) of
                      Cursor [] ->
                        Alg (presentType (return $(varE value)))
-                           $(litE (stringL (nameBase name)))
+                           name
                            $(listE (zipWith (\i var ->
                                                tupE [[|presentType (return $(varE var))|]
                                                     ,[|Cursor (return $(litE (integerL i)))|]])
@@ -142,10 +170,13 @@ makeAlt mode h value (NormalC name slots) =
                        $(if null pvars
                             then [|error ("Unexpected case for Present: " ++
                                           $(litE (stringL (show name))) ++
-                                          "Index: " ++ show (i,j))|]
+                                          "Index: " ++
+                                          show (i,j))|]
                             else caseE [|i|]
                                        (zipWith (\ij var ->
-                                                   (match (if ij == fromIntegral (length pvars) - 1
+                                                   (match (if ij ==
+                                                              fromIntegral (length pvars) -
+                                                              1
                                                               then wildP
                                                               else litP (integerL ij))
                                                           (normalB [|presentValue $(varE mode)
@@ -156,8 +187,9 @@ makeAlt mode h value (NormalC name slots) =
                                                 [0 ..]
                                                 pvars))|])
         []
-  where pvars = zipWith makeSlot [1 :: Integer ..] slots
-        makeSlot x _ = mkName ("x" ++ show x)
+  where pvars =
+          zipWith makeSlot [1 :: Integer ..] slots
+        makeSlot x _ = mkName ("slot" ++ show x)
 makeAlt mode h value (InfixC slot1 name slot2) =
   makeAlt mode h value (NormalC name [slot1,slot2])
 makeAlt _ _ _ c = error ("makePresent.makeAlt: Unexpected case: " ++ show c)

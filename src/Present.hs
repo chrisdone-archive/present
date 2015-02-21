@@ -4,9 +4,10 @@
 module Present where
 
 import Present.Types
+import Present.Instances ()
 
 import Data.Monoid
 
 -- | Make a presentation at the given cursor.
-present :: Present a => Cursor -> a -> Presentation
-present = presentValue mempty
+present :: Present a => Mode -> Cursor -> a -> Presentation
+present mode = presentValue mode mempty

@@ -1,2 +1,1 @@
-((haskell-mode . ((haskell-process-type . ghci)
-                  (haskell-process-use-ghci . t))))
+((haskell-mode . ((haskell-process-use-ghci . t))))

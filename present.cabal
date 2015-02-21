@@ -20,3 +20,4 @@ library
   other-modules:     Present.String
   build-depends:     base >= 4 && <5
                    , template-haskell
+                   , th-lift

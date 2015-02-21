@@ -9,14 +9,14 @@ module Present.Types
   ,Present(..)
   ,Presentation(..)
   ,Type(..)
-  ,Field(..)
-  ,Constructor(..)
+  ,Name
   ,Cursor(..))
   where
 
 import Data.Monoid
 import Data.Proxy
-import Data.String
+
+import Language.Haskell.TH.Syntax
 
 -- | The presentation mode.
 data Mode
@@ -37,30 +37,17 @@ class Present a where
   -- elements, but with 'presentType' you have a convenient way to get
   -- the type.
 
--- | A type's display.
-newtype Type =
-  Type {typeString :: String}
-  deriving (IsString,Monoid,Show)
-
--- | A field name.
-newtype Field = Field { fieldString :: String }
-  deriving (Show)
-
--- | A constructor name.
-newtype Constructor = Constructor { constructorName :: String }
-  deriving (Show,IsString)
-
 -- | A cursor into a data structure.
-newtype Cursor = Cursor { cursorInts :: [Integer] }
+newtype Cursor = Cursor { cursorInts :: [Int] }
   deriving (Monoid,Show)
 
 -- | A presentation of a level of a data type.
 data Presentation
-  = Integral !Type !Constructor
+  = Integral !Type !Integer
   -- ^ An integral presentation (Int, Integer, etc.).
-  | Floating !Type !Constructor
+  | Decimal !Type !String
   -- ^ A floating point (Float, Double, etc.)
-  | Char !Type !String
+  | Char !Type !Char
   -- ^ A character presentation.
   | String !Type !(Maybe ((Type,Cursor),(Type,Cursor)))
   -- ^ A string presentation. Either empty or a head and a tail.
@@ -68,8 +55,8 @@ data Presentation
   -- ^ A tuple presentation of many differing types.
   | List !Type !(Maybe ((Type,Cursor),(Type,Cursor)))
   -- ^ A list presentation. Either empty or a head and a tail.
-  | Alg !Type !Constructor ![(Type,Cursor)]
+  | Alg !Type !Name ![(Type,Cursor)]
   -- ^ An algebraic data type with many types inside.
-  | Record !Type !Constructor ![(Field,(Type,Cursor))]
+  | Record !Type !Name ![(Name,(Type,Cursor))]
   -- ^ A record data type with many named types inside.
   deriving (Show)
