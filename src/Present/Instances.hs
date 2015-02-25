@@ -1,6 +1,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE MagicHash #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 -- | Custom instances for data types which cannot/shouldn't be derived
@@ -8,13 +9,13 @@
 
 module Present.Instances where
 
-import Data.Int
-import Data.Word
 import Present.TH
 import Present.Types
 
+import Data.Int
 import Data.Monoid
 import Data.Proxy
+import Data.Word
 
 --------------------------------------------------------------------------------
 -- Flat types
@@ -24,6 +25,12 @@ instance Present Char where
     Char (presentType (return i))
          i
   presentType _ = ConT ''Char
+
+instance Present () where
+  presentValue _mode _ _ i =
+    Tuple (presentType (return i))
+          []
+  presentType _ = ConT ''()
 
 --------------------------------------------------------------------------------
 -- Container types

@@ -35,7 +35,8 @@ class Present a where
   -- ^ Useful for container types which want to show the type of its
   -- child types without needing a value. E.g. a list may have zero
   -- elements, but with 'presentType' you have a convenient way to get
-  -- the type.
+  -- the type. Typeable is no longer derivable, but this is better
+  -- anyway because it allows more structure in the 'Type' type.
 
 -- | A cursor into a data structure.
 newtype Cursor = Cursor { cursorInts :: [Int] }
@@ -55,6 +56,8 @@ data Presentation
   -- ^ A tuple presentation of many differing types.
   | List !Type !(Maybe ((Type,Cursor),(Type,Cursor)))
   -- ^ A list presentation. Either empty or a head and a tail.
+  | Vector !Type ![(Type,Cursor)]
+  -- ^ A vectorish type.
   | Alg !Type !Name ![(Type,Cursor)]
   -- ^ An algebraic data type with many types inside.
   | Record !Type !Name ![(Name,(Type,Cursor))]
