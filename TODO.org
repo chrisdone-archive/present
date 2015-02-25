@@ -1,0 +1,10 @@
+* TODO Make the instance makers re-runnable
+Detect whether there's already an instance for the type.
+* TODO Make the 'derive all' function
+* TODO Add any additional base types
+* TODO Instances for tuples (use TH)
+* TODO Produce external representations for things like Text/ByteString
+In such a way that doesn't *depend* on Text/ByteString!
+* TODO Implement Elisp for displaying a presentation
+Maybe put it in its own package, not sure. It should be
+self-contained, really.
