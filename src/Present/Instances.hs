@@ -24,13 +24,13 @@ instance Present Char where
   presentValue _mode _ _ i =
     Char (presentType (return i))
          i
-  presentType _ = ConT ''Char
+  presentType _ = TyCon (nameToIdent ''Char)
 
 instance Present () where
   presentValue _mode _ _ i =
     Tuple (presentType (return i))
           []
-  presentType _ = ConT ''()
+  presentType _ = TyCon (nameToIdent ''())
 
 --------------------------------------------------------------------------------
 -- Container types
@@ -48,7 +48,7 @@ instance (Present a,Present b) => Present (a,b) where
     presentValue _mode h (Cursor j) x
   presentValue _mode h (Cursor (_:j)) (_,y) =
     presentValue _mode h (Cursor j) y
-  presentType p = AppT (AppT (TupleT 2)(presentType px)) (presentType py)
+  presentType p = TyTuple [presentType px,presentType py]
     where (px,py) = proxyTuple p
           proxyTuple :: Proxy (a,b) -> (Proxy a,Proxy b)
           proxyTuple _ = (Proxy,Proxy)
@@ -68,20 +68,13 @@ instance Present a => Present [a] where
           ty = presentType (proxyList (return xs))
           proxyList :: Proxy [a] -> Proxy a
           proxyList _ = Proxy
-  presentType p = AppT ListT ty
+  presentType p = TyList ty
     where ty = presentType (proxyList p)
           proxyList :: Proxy [a] -> Proxy a
           proxyList _ = Proxy
 
 --------------------------------------------------------------------------------
 -- Derivings
-
--- Basic Prelude sum types
-
-$(makeGenericPresent ''Either)
-$(makeGenericPresent ''Maybe)
-$(makeGenericPresent ''Bool)
-$(makeGenericPresent ''Ordering)
 
 -- Integrals
 
@@ -103,3 +96,6 @@ $(makeIntegralPresent ''Word64)
 
 $(makeDecimalPresent ''Float)
 $(makeDecimalPresent ''Double)
+$(makeDecimalPresent ''Double)
+
+$(makePresents [t|Either Ordering (Maybe Char)|])

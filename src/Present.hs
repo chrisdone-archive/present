@@ -5,6 +5,7 @@ module Present where
 
 import Present.Types
 import Present.Instances ()
+import Present.Sexp
 
 import Data.Monoid
 

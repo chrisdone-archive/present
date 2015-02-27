@@ -1,7 +1,13 @@
-* TODO Make the instance makers re-runnable
+* DONE Make the instance makers re-runnable
+  CLOSED: [2015-02-27 Fri 01:43]
+  CLOCK: [2015-02-26 Thu 19:50]--[2015-02-27 Fri 01:43] =>  5:53
 Detect whether there's already an instance for the type.
-* TODO Make the 'derive all' function
-* TODO Add any additional base types
+* DONE Make the 'derive all' function
+  CLOSED: [2015-02-27 Fri 02:18]
+* DONE Add any additional base types
+  CLOSED: [2015-02-27 Fri 02:18]
+* DONE Implement s-expression output
+  CLOSED: [2015-02-27 Fri 02:18]
 * TODO Instances for tuples (use TH)
 * TODO Produce external representations for things like Text/ByteString
 In such a way that doesn't *depend* on Text/ByteString!
