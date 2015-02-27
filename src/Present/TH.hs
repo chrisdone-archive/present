@@ -158,7 +158,7 @@ makeAlgPresent name =
                   [1 :: Integer ..]
                   tyvars
 
--- | Make an instance declaration for 'Present-.
+-- | Make an instance declaration for 'Present'.
 makeInstance :: Name -> [Q TH.Type] -> [Con] -> Q Dec
 makeInstance name vars cons =
   instanceD ctx head [makePresentValue cons,makePresentType name vars]
