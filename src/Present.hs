@@ -1,3 +1,4 @@
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
@@ -6,7 +7,9 @@
 
 module Present where
 
+import           Data.Int
 import           Data.Monoid (Monoid)
+import           Data.Word
 import           Language.Haskell.TH (Q)
 
 import qualified Data.Char as Char
@@ -81,20 +84,231 @@ data Ty
           !Ty
   deriving (Show)
 
+instance TH.Lift Ty where
+  lift ty =
+    case ty of
+      TyCon i -> [|TyCon i|]
+      TyTuple tys -> [|TyTuple tys|]
+      TyList t -> [|TyList t|]
+      TyApp a b -> [|TyApp a b|]
+
+-- | Just for better documentation.
+type TExp a = TH.Exp
+
+--------------------------------------------------------------------------------
+-- Top-level running functions
+
+-- | Present GHCi's "it" name.
+presentIt :: Q (TExp (Mode -> Cursor -> Presentation))
+presentIt =
+  present (TH.mkName "it")
+
+-- | Present GHCi's "it" name.
+presentItSexp :: Q (TExp (Mode -> Cursor -> IO ()))
+presentItSexp =
+  [|\mode cursor ->
+      putStrLn (toString (fromPresentation ($(present (TH.mkName "it")) mode cursor)))|]
+
 --------------------------------------------------------------------------------
 -- Template Haskell code generation
 
 -- | Make a presentation at the given cursor.
-present :: Mode -> Cursor -> TH.Name -> Q TH.Exp
-present mode cursor name =
+present :: TH.Name -> Q (TExp (Mode -> Cursor -> a -> Presentation))
+present name =
   do info <- TH.reify name
      case info of
-       TH.VarI _ ty _  _ -> generate ty
-       _ -> error "present: Expects a variable name as argument."
+       TH.VarI _ ty _ _ ->
+         do TH.runIO (print ty)
+            [|\mode cursor ->
+                let hist = (Cursor [])
+                in $(generate ty) mode
+                                  hist
+                                  cursor
+                                  $(TH.varE name)|]
+       _ ->
+         error "Present.present: Expects a variable name as argument."
 
--- | Generate presenters for constructors of a given type.
-generate :: TH.Type -> Q TH.Exp
-generate = undefined
+-- | Generates a function from a type.
+generate :: TH.Type -> Q (TExp (Mode -> Cursor -> a -> Presentation))
+generate = go []
+  where go args ty =
+          case ty of
+            TH.ForallT _ _ ty -> go args ty
+            TH.SigT _ ty -> go args ty
+            TH.VarT _ -> undefined
+            TH.ConT t -> genConT t
+            TH.AppT TH.ListT ty -> genList ty
+            TH.AppT op@TH.AppT{} arg ->
+              go (arg : args) op
+            TH.AppT op arg ->
+              genAppT op (arg : args)
+            TH.PromotedT _ ->
+              error ("Present.go: Unexpected type at this point: " ++ show ty)
+            TH.TupleT i
+              | i == 0 -> genUnit
+              | otherwise ->
+                error ("Present.go: Tuple not expected here." ++ show ty)
+            TH.UnboxedTupleT _ -> undefined
+            TH.ArrowT -> undefined
+            TH.ListT -> undefined
+            TH.PromotedTupleT _ -> undefined
+            TH.PromotedNilT -> undefined
+            TH.PromotedConsT -> undefined
+            TH.StarT -> undefined
+            TH.ConstraintT -> undefined
+            TH.LitT _ -> undefined
+
+-- | Generate a presentation for the application of some types.
+genAppT :: TH.Type -> [TH.Type] -> Q (TExp (Mode -> Cursor -> Cursor -> a -> Presentation))
+genAppT op args =
+  case op of
+    TH.TupleT len
+      | length args == len ->
+        if null args
+           then genUnit
+           else genTuple args
+      | otherwise ->
+        error ("Present.go: Wrong number of arguments to tuple! " ++
+               show (op,args))
+
+-- | Generate a presentation for a tuple.
+genTuple :: [TH.Type] -> Q (TExp (Mode -> Cursor -> Cursor -> a -> Presentation))
+genTuple args =
+  [|\mode (Cursor hist) (Cursor cursor) it ->
+      case cursor of
+        [] ->
+          Tuple (TyTuple $(TH.lift (map toTy args)))
+                (map (\(i,ty) ->
+                        (ty
+                        ,Cursor (hist ++
+                                 [i])))
+                     (zip [0 ..]
+                          $(TH.lift (map toTy args))))
+        (j:js) ->
+          let hist' =
+                Cursor (hist ++
+                        [j])
+              cursor' = Cursor js
+              badCursor =
+                error ("Present.genTuple: invalid cursor number: " ++ show j)
+          in $(let f i =
+                     TH.lamE [TH.tupP (map (\k ->
+                                              if k == i
+                                                 then TH.varP (TH.mkName "x")
+                                                 else TH.wildP)
+                                           (zipWith const [0 ..] args))]
+                             (TH.varE (TH.mkName "x"))
+               in TH.caseE [|j|]
+                           (map (\(i,ty) ->
+                                   TH.match (TH.litP (TH.integerL (fromIntegral i)))
+                                            (TH.normalB
+                                               [|$(generate ty) mode
+                                                                hist'
+                                                                cursor'
+                                                                ($(f i) it)|])
+                                            [])
+                                (zip [0 ..] args) ++
+                            [TH.match TH.wildP (TH.normalB [|badCursor|]) []]))|]
+
+-- | Generate a presentation for a tuple.
+genList :: TH.Type -> Q (TExp (Mode -> Cursor -> Cursor -> a -> Presentation))
+genList arg =
+  [|let self =
+          \mode (Cursor hist) (Cursor cursor) it ->
+            let cursorDisplay = hist ++ cursor
+                badList = error ("Present.genList: unexpected empty list for cursor: " ++
+                                 show cursorDisplay)
+            in case cursor of
+                 [] ->
+                   List $(TH.lift (toTy arg))
+                        (case it of
+                           [] -> Nothing
+                           (_:_) ->
+                             (Just (($(TH.lift (toTy arg))
+                                    ,Cursor (hist ++
+                                             [0]))
+                                   ,($(TH.lift (TyList (toTy arg)))
+                                    ,Cursor (hist ++
+                                             [1])))))
+                 (j:js) ->
+                   let hist' =
+                         Cursor (hist ++
+                                 [j])
+                       cursor' = Cursor js
+                   in case j of
+                        0 ->
+                          $(generate arg)
+                            mode
+                            hist'
+                            cursor'
+                            (case it of
+                               (x:_) -> x
+                               _ -> badList)
+                        1 ->
+                          self mode
+                               hist'
+                               cursor'
+                               (case it of
+                                  (_:xs) -> xs
+                                  _ -> badList)
+                        _ ->
+                          error ("Present.genList: invalid cursor number: " ++
+                                 show cursor)
+    in self|]
+
+-- | Generate () type. This forces the tuple when presented.
+genUnit :: Q (TExp (Mode -> Cursor -> a -> Presentation))
+genUnit =
+  [|\_mode _hist _cursor () ->
+      Tuple (TyCon $(TH.lift (nameToIdent ''()))) []|]
+
+-- | Generate a presentation for the given constructor.
+genConT :: TH.Name -> Q (TExp (Mode -> Cursor -> a -> Presentation))
+genConT t
+  | t == ''Char =
+    [|\_mode _hist _cursor ch ->
+        Char (TyCon $(TH.lift (nameToIdent t))) ch|]
+  | elem t
+         [''Integer
+         ,''Int
+         ,''Int8
+         ,''Int16
+         ,''Int32
+         ,''Int64
+         ,''Word
+         ,''Word8
+         ,''Word16
+         ,''Word32
+         ,''Word64] =
+    [|\_mode _hist _cursor i ->
+        Integral (TyCon $(TH.lift (nameToIdent t)))
+                 (fromIntegral i)|]
+  | elem t [''Float,''Double,''Double] =
+    [|\_mode _hist _cursor i ->
+        Decimal (TyCon $(TH.lift (nameToIdent t)))
+                (show i)|]
+  | otherwise =
+    error ("Present.go: Unhandled type constructor case: " ++ show t)
+
+-- | Convert the wider type to the simpler presentation type.
+toTy :: TH.Type -> Ty
+toTy ty =
+  case ty of
+    TH.ForallT _ _ ty -> toTy ty
+    TH.AppT a b -> TyApp (toTy a) (toTy b)
+    TH.SigT ty _ -> toTy ty
+    TH.VarT v -> error "Present.toTy: No type variables expected."
+    TH.ConT c -> TyCon (nameToIdent c)
+    TH.PromotedT c -> error "Present.toTy: No promoted types expected."
+    _ -> error ("Present.toTy: Unexpected type here: " ++ show ty)
+
+-- | Convert a name to an ident.
+nameToIdent :: TH.Name -> Ident
+nameToIdent (TH.Name occ flav) =
+  case flav of
+    TH.NameQ md -> Ident (TH.PkgName "") md occ
+    TH.NameG _ pkg md -> Ident pkg md occ
+    _ -> error "Unexpected name type for identifier."
 
 --------------------------------------------------------------------------------
 -- Conversion to s-expressions
