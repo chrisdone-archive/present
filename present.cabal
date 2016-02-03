@@ -17,16 +17,7 @@ library
   exposed-modules:   Present.Types
                      Present.TH
                      Present.Instances
-  other-modules:     Present.Text
-                     Present.String
-                     Present.ByteString
-  build-depends:     aeson
-                   , atto-lisp
-                   , base >= 4 && <5
-                   , bytestring
-                   , data-default
-                   , mtl
-                   , semigroups
-                   , tagged
+  build-depends:     base >= 4 && <5
                    , template-haskell
                    , text
+                   , bytestring
