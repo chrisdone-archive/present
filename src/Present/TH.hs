@@ -7,7 +7,6 @@
 module Present.TH where
 
 import           Data.Proxy
-import           Data.Text (Text)
 import qualified Data.Text as T
 import           Language.Haskell.TH as TH
 import           Prelude hiding (head)
@@ -44,8 +43,7 @@ makeInstance :: Name -> [Q TH.Type] -> [Con] -> Q Dec
 makeInstance name vars cons =
   instanceD ctx head [makePresentValue cons,makePresentType name vars]
   where ctx =
-          sequence (map (classP ''Present .
-                         return)
+          sequence (map (appT (conT ''Present))
                         vars)
         head =
           appT (conT ''Present)
