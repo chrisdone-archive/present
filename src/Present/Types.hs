@@ -19,9 +19,15 @@ import Data.String
 import Data.Text (Text)
 
 -- | Things which can be presented in a uniform manner.
-class Present a where
-  presentValue :: Cursor -> Cursor -> a -> Presentation
-  presentType :: Proxy a -> Type
+class Present a  where
+  presentValue
+    :: Cursor -- ^ History, used as a breadcrumb to construct new search paths
+    -> Cursor -- ^ Search path
+    -> a      -- ^ Structure to dive into
+    -> Presentation
+  presentType
+    :: Proxy a -- ^ Just a witness for the instance
+    -> Type
 
 -- | A type's display.
 newtype Type =
