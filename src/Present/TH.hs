@@ -80,7 +80,7 @@ makePresentType name vars =
         makeTyVarRep var =
           let needle = mkName "needle"
           in letE [sigD needle
-                        (appT (appT tyFun
+                        (appT (appT arrowT
                                     (appT (conT ''Proxy)
                                           (foldl appT (conT name) vars)))
                               (appT (conT ''Proxy) var))
@@ -91,10 +91,6 @@ makePresentType name vars =
                   (appE (varE 'presentType)
                         (appE (varE needle)
                               (varE proxy)))
-
--- | Because I didn't see a better way anywhere.
-tyFun :: TypeQ
-tyFun = [t|(->)|]
 
 -- | Make the alt for presenting a constructor.
 makeAlt :: Name -> Name -> Con -> Q Match
