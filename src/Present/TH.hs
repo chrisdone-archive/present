@@ -6,11 +6,10 @@
 
 module Present.TH where
 
-import           Data.Proxy
-import qualified Data.Text as T
-import           Language.Haskell.TH as TH
-import           Prelude hiding (head)
-import           Present.Types
+import Data.Proxy
+import Language.Haskell.TH as TH
+import Prelude hiding (head)
+import Present.Types
 
 -- | Make an instance for 'Present' for the given type.
 makePresent :: Name -> Q [Dec]
@@ -69,8 +68,8 @@ makePresentType name vars =
                    then [wildP]
                    else [varP proxy])
                (normalB (appE (conE 'Type)
-                              (appE (varE 'T.unwords)
-                                    (appE [|map typeText|]
+                              (appE (varE 'unwords)
+                                    (appE [|map typeString|]
                                           (listE (litE (stringL (nameBase name)) :
                                                   map makeTyVarRep vars))))))
                []]
