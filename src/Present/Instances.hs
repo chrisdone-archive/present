@@ -25,19 +25,19 @@ instance Present Int where
   presentValue _ _ i =
     Integral (presentType (return i))
              (Constructor (ST.pack (show i)))
-  presentType _ = "Int"
+  presentType _ = "Prelude.Int"
 
 instance Present Integer where
   presentValue _ _ i =
     Integral (presentType (return i))
              (Constructor (ST.pack (show i)))
-  presentType _ = "Integer"
+  presentType _ = "Prelude.Integer"
 
 instance Present Char where
   presentValue _ _ i =
     Char (presentType (return i))
          (ST.pack (show i))
-  presentType _ = "Char"
+  presentType _ = "Prelude.Char"
 
 --------------------------------------------------------------------------------
 -- Container types

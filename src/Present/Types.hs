@@ -13,10 +13,11 @@ module Present.Types
   ,Cursor(..))
   where
 
-import Data.Monoid
 import Data.Proxy
 import Data.String
 import Data.Text (Text)
+import qualified Data.Text as T
+import Data.Typeable
 
 -- | Things which can be presented in a uniform manner.
 class Present a  where
