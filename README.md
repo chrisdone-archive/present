@@ -1,6 +1,16 @@
-present [![Hackage](https://img.shields.io/hackage/v/present.svg?style=flat)](https://hackage.haskell.org/package/present)
+present
 =====
 
 Make presentations for data types.
 
-TODO: Use README.md from master branch to create a new README.
+## Requirements
+
+The following language extensions are required to be enabled in your
+GHC session:
+
+    -XTemplateHaskell -XScopedTypeVariables -XOverloadedStrings
+
+## Usage
+
+In a file that you're going to load into GHCi, put `$(makePresent 'x)`
+for the thing you want to present.
