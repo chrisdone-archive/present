@@ -4,7 +4,11 @@ import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
 import Data.List
 
-data Presentation = Cons Name [Presentation]
+data Presentation
+  = Primitive Name
+              [Presentation]
+  | Cons Name
+         [Presentation]
   deriving (Show)
 
 present :: Name -> Q Exp
@@ -59,22 +63,25 @@ makeConPresenter name =
                                              (map (varP . var . fst)
                                                   (zip [1..] slots)))
                                        (normalB
-                                          (listE
-                                             (map
-                                                  (\(i,(_strictness,ty)) ->
-                                                     case ty of
-                                                       VarT vname ->
-                                                         case find (tyVarMatch vname . fst)
-                                                                   (zip tyvars [1..]) of
-                                                           Nothing -> error "Invalid type variable in constructor."
-                                                           Just (_,x) ->
-                                                             appE (varE (tyvar x))
-                                                                  (varE (var i))
-                                                       ty ->
-
-                                                         appE (makePresenter ty)
-                                                              (varE (var i)))
-                                                  (zip [1..] slots))))
+                                          (appE (appE
+                                                   (conE (mkName "Cons"))
+                                                   (appE (varE (mkName "mkName"))
+                                                         (stringE (show name))))
+                                                (listE
+                                                   (map
+                                                        (\(i,(_strictness,ty)) ->
+                                                           case ty of
+                                                             VarT vname ->
+                                                               case find (tyVarMatch vname . fst)
+                                                                         (zip tyvars [1..]) of
+                                                                 Nothing -> error "Invalid type variable in constructor."
+                                                                 Just (_,x) ->
+                                                                   appE (varE (tyvar x))
+                                                                        (varE (var i))
+                                                             ty ->
+                                                               appE (makePresenter ty)
+                                                                    (varE (var i)))
+                                                        (zip [1..] slots)))))
                                        []
                                 _ ->
                                   case con of
@@ -90,6 +97,14 @@ makeConPresenter name =
                        PlainTV name' -> name == name'
                        KindedTV name' _ -> name == name'
        PrimTyConI name _arity _unlifted ->
-         parensE (lamE [wildP] (stringE ("Primitive: " ++ show name)))
+         parensE
+           (lamE
+              [wildP]
+              (appE (appE
+                       (conE (mkName "Cons"))
+                       (appE
+                          (varE (mkName "mkName"))
+                          (stringE (show name)) ) )
+                    (listE [])))
        _ -> error ("Unsupported type for presenting: " ++ show name)
   where tyvar i = mkName ("tyvar" ++ show i)
