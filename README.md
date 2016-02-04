@@ -1,16 +1,6 @@
-present
-=====
+ABANDONED
+=========
 
-Make presentations for data types.
+It seems impossible to generate class instances via GHCi.
 
-## Requirements
-
-The following language extensions are required to be enabled in your
-GHC session:
-
-    -XTemplateHaskell -XScopedTypeVariables -XOverloadedStrings
-
-## Usage
-
-In a file that you're going to load into GHCi, put `$(makePresent 'x)`
-for the thing you want to present.
+This throws a major spanner in the works for the presentation library.
