@@ -1,8 +1,23 @@
+--
+-- Remaining work:
+--
 -- TODO: handle recursive types
+--
 -- TODO: type aliases
+--
+-- TODO: better error messages for unsupported things
+--
+-- TODO: consider defaulting common classes like Num, IsString, etc.
+--
+-- TODO: consider supporting printing e.g. `Proxy :: Proxy a` or `Left
+-- 'a' :: Either Char a`. In other words, if it's unambiguous (none of
+-- the data slots depend on a type variable), might as well print
+-- it. GHCi supports this by defaulting, we can support it by just
+-- ignoring unused type variables.
 
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+
 -- |
 
 module P where
