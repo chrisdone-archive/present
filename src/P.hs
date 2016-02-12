@@ -1,34 +1,11 @@
 {-# LANGUAGE LambdaCase #-}
-
--- LAST THING I WAS TRYING TO FIX:
-
--- need to generate:
---p_Ghci1_Foo
---   = (\ tyvar1
---        -> (\ a
---              -> case a of {
---                   Foo p1 -> Alg "Ghci1.Foo" [p_GHC_Base_Either tyvar1 tyvar2 p1] }))
-
--- it should take into account how many arguments are expected by a
--- printer (maybe by having makePresenter return an arity?!), and then
--- we can know to go from:
-
--- a = Char
--- b = Int
-
--- Either a b -> p_Either p_Char p_Int p1
-
-
---
 -- Remaining work:
+
+-- TODO: cleanup
 --
 -- TODO: need to add type-signatures to retain let generalization
 --
--- TODO: handle recursive types
---
 -- TODO: type aliases
---
--- TODO: better error messages for unsupported things
 --
 -- TODO: consider defaulting common classes like Num, IsString, etc.
 --
@@ -277,13 +254,10 @@ makeConPresenter originalType thisName =
 
 makeDataD :: Type -> [TyVarBndr] -> [Con] -> P Exp
 makeDataD originalType typeVariables constructors =
-  foldl wrapInArg
-        caseOnConstructors
-        (reverse typeVariables)
+  foldl wrapInArg caseOnConstructors (reverse typeVariables)
   where wrapInArg body i =
           ParensE <$> (LamE [VarP (present_X (typeVariableName i))] <$> body)
-        caseOnConstructors =
-          LamCaseE <$> (mapM constructorCase constructors)
+        caseOnConstructors = LamCaseE <$> (mapM constructorCase constructors)
         constructorCase con =
           case con of
             NormalC name slots -> normalConstructor name slots
@@ -308,13 +282,15 @@ makeDataD originalType typeVariables constructors =
           AppE <$> express typ <*> pure (VarE (slot_X i))
           where express (VarT appliedTyVar) =
                   return (VarE (present_X appliedTyVar))
-                express (AppT f x) =
-                  AppE <$> express f <*> express x
-                express ty@ConT {} =
+                express (AppT f x) = AppE <$> express f <*> express x
+                express ty@ConT{} =
                   do P (modify (\s -> s {pTypes = pTypesCache s}))
                      e <- makePresenter originalType ty
                      P (modify (\s -> s {pTypes = []}))
                      return e
+                express ty =
+                  help ["Unsupported type: " ++
+                        pprint ty ++ " (" ++ show ty ++ ")"]
 
 slot_X :: Int -> Name
 slot_X = mkName . ("slot_" ++) . show
