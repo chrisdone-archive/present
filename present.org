@@ -2,6 +2,7 @@
 * TODO Newtypes, records
 * TODO Lists, tuples
 * TODO Type-aliases
+* TODO Primitive types (Char, Int, etc.)
 * TODO Cleanup
 * TODO Remove state-monad depdency
 * TODO Need to add type-signatures to retain let generalization
