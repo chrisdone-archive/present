@@ -1,3 +1,23 @@
+
+-- LAST THING I WAS TRYING TO FIX:
+
+-- need to generate:
+--p_Ghci1_Foo
+--   = (\ tyvar1
+--        -> (\ a
+--              -> case a of {
+--                   Foo p1 -> Alg "Ghci1.Foo" [p_GHC_Base_Either tyvar1 tyvar2 p1] }))
+
+-- it should take into account how many arguments are expected by a
+-- printer (maybe by having makePresenter return an arity?!), and then
+-- we can know to go from:
+
+-- a = Char
+-- b = Int
+
+-- Either a b -> p_Either p_Char p_Int p1
+
+
 --
 -- Remaining work:
 --
@@ -32,7 +52,7 @@ module Present
   where
 
 import Control.Monad.State.Strict
-import Data.List
+-- -- import Data.List
 
 import Language.Haskell.TH
 
@@ -81,7 +101,7 @@ declareP name func =
 
 -- | Given the name of a type Foo, make a function name like p_Foo.
 funcName :: Name -> Name
-funcName name = mkName ("p_" ++ concatMap normalize (show name))
+funcName name = mkName ("present_" ++ concatMap normalize (show name))
   where normalize c =
           case c of
             '_' -> "__"
@@ -150,7 +170,7 @@ presentTy name ty =
                           -- which avoids recursive types.
                           -- Then we enable decl generation and re-generate.
                           P (modify (\s -> s {pMakeDecls = True, pTypes = [], pTypesCache = pTypes s}))
-                          {-makePresenter ty ty-}
+                          _ <- makePresenter ty ty
                           return e))
                  (PState [] [] [] False)
      letE (map (uncurry makeDec) decls)
@@ -236,73 +256,99 @@ makeConPresenter originalType thisName =
      case info of
        TyConI dec ->
          case dec of
-           DataD _ctx typeName tyvars cons _names ->
-             let ret = foldl
-                         (\acc i -> ParensE <$> (LamE [VarP (tyvar i)] <$> acc))
-                         (ParensE <$>
-                             (LamE
-                                 [VarP a]
-                                 <$> (CaseE (VarE a) <$>
-                                        (mapM
-                                           (\con ->
-                                              case con of
-                                                NormalC name slots ->
-                                                  let var = mkName . ("p"++) . show
-                                                  in Match
-                                                        (ConP name
-                                                               (map (VarP . var . fst)
-                                                                    (zip [1..] slots)))
-                                                                    <$>
-                                                        (NormalB <$>
-                                                            (AppE
-                                                             (AppE
-                                                                  (ConE (mkName "Alg"))
-                                                                  (nameE name)) <$>
-                                                                        (ListE <$>
-                                                                           (mapM (\(i,(_strictness,ty)) ->
-                                                                                    case ty of
-                                                                                      VarT vname ->
-                                                                                        case find (tyVarMatch vname . fst)
-                                                                                                  (zip tyvars [1..]) of
-                                                                                          Nothing -> error "Invalid type variable in constructor."
-                                                                                          Just (_,x) ->
-                                                                                            return (AppE (VarE (tyvar x))
-                                                                                                         (VarE (var i)))
-                                                                                      ty' ->
-                                                                                        do P (modify (\s -> s { pTypes = pTypesCache s}))
-                                                                                           e <- AppE <$> (makePresenter originalType ty')
-                                                                                                        <*> (pure (VarE (var i)))
-                                                                                           P (modify (\s -> s { pTypes = []}))
-                                                                                           return e)
-                                                                                 (zip [1..] slots))))) <*>
-                                                        pure []
-                                                _ ->
-                                                  case con of
-                                                    NormalC _ _ -> error ("NormalC")
-                                                    RecC _ _ -> error ("RecC")
-                                                    InfixC _ _ _ -> error ("InfixC")
-                                                    ForallC _ _ _ -> error ("ForallC"))
-                                           cons))))
-                         (reverse (zipWith const [1..] tyvars))
-             in declareP typeName ret
-           TySynD _name _tyvars _ty ->
+           DataD _ctx typeName typeVariables constructors _names ->
+             declareP typeName
+                      (makeDataD originalType typeVariables constructors)
+           TySynD _name _typeVariables _ty ->
              pure (ParensE (LamE [WildP]
-                                 (AppE
-                                    (ConE (mkName "Primitive"))
-                                    (LitE (StringL "type synonym")))))
-           x -> error ("Unsupported type declaration: " ++ pprint x ++ " (" ++ show x ++ ")")
+                                 (AppE (ConE (mkName "Primitive"))
+                                       (LitE (StringL "type synonym")))))
+           x ->
+             error ("Unsupported type declaration: " ++
+                    pprint x ++ " (" ++ show x ++ ")")
        PrimTyConI name _arity _unlifted ->
-         pure (ParensE
-                  (LamE
-                      [WildP]
-                      (AppE
-                         (ConE (mkName "Primitive"))
-                         (nameE name))))
+         pure (ParensE (LamE [WildP]
+                             (AppE (ConE (mkName "Primitive"))
+                                   (nameE name))))
        _ -> error ("Unsupported type for presenting: " ++ show thisName)
-  where a = mkName "a"
-        tyvar i = mkName ("tyvar" ++ show i)
-        nameE = LitE . StringL . show
-        tyVarMatch name ty =
-          case ty of
-            PlainTV name' -> name == name'
-            KindedTV name' _ -> name == name'
+
+makeDataD :: Type -> [TyVarBndr] -> [Con] -> P Exp
+makeDataD originalType typeVariables constructors =
+  foldl wrapInArg
+        caseOnConstructors
+        (reverse typeVariables)
+  where wrapInArg body i =
+          ParensE <$> (LamE [VarP (present_X (typeVariableName i))] <$> body)
+        caseOnConstructors =
+          LamCaseE <$> (mapM constructorCase constructors)
+        constructorCase con =
+          case con of
+            NormalC name slots -> normalConstructor name slots
+            _ ->
+              case con of
+                NormalC _ _ -> error ("NormalC")
+                RecC _ _ -> error ("RecC")
+                InfixC _ _ _ -> error ("InfixC")
+                ForallC _ _ _ -> error ("ForallC")
+        normalConstructor name slots =
+          Match constructorPattern <$> matchBody <*> pure []
+          where constructorPattern =
+                  (ConP name
+                        (map (VarP . slot_X . fst)
+                             (zip [1 ..] slots)))
+                matchBody =
+                  (NormalB <$>
+                   (AppE (AppE (ConE (mkName "Alg"))
+                               (nameE name)) <$>
+                    (ListE <$> mapM constructorSlot (zip [1 ..] slots))))
+        constructorSlot (i,(_bang,typ)) =
+          AppE <$> express typ <*> pure (VarE (slot_X i))
+          where express (VarT appliedTyVar) =
+                  return (VarE (present_X appliedTyVar))
+                express (AppT f x) =
+                  AppE <$> express f <*> express x
+                express ty@ConT {} =
+                  makePresenter originalType ty
+
+x = 1
+           {-let walk ty =
+                 case ty of
+                   VarT vname ->
+                     do case find (tyVarMatch vname) typeVariables of
+                          Nothing ->
+                            error "Invalid type variable in constructor."
+                          Just x ->
+                            return (AppE (VarE (present_X x))
+                                         (VarE (slot_X i)))
+                   ty' ->
+                     do P (modify (\s -> s {pTypes = pTypesCache s}))
+                        P (lift (runIO (putStrLn ("makePresenter for: " ++
+                                                  show ty'))))
+                        e <-
+                          AppE <$> (makePresenter originalType ty') <*>
+                          (pure (VarE (slot_X i)))
+                        P (modify (\s -> s {pTypes = []}))
+                        return e
+           in walk typ-}
+
+slot_X :: Int -> Name
+slot_X = mkName . ("slot_" ++) . show
+
+present_X :: Name -> Name
+present_X i = mkName ("present_" ++ show i)
+
+typeVariableName :: TyVarBndr -> Name
+typeVariableName (PlainTV name) = name
+typeVariableName (KindedTV name _) = name
+
+nameE :: Name -> Exp
+nameE = LitE . StringL . show
+
+stringP :: String -> Q Exp
+stringP = return . LitE . StringL
+
+tyVarMatch :: Name -> TyVarBndr -> Bool
+tyVarMatch name ty =
+  case ty of
+    PlainTV name' -> name == name'
+    KindedTV name' _ -> name == name'
