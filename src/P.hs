@@ -22,11 +22,26 @@
 
 -- | Generate presentations for a data type.
 
-module Present where
+module Present
+  (presentIt
+  ,present
+  ,Presentation(..)
+  ,Record(..)
+  ,example
+  )
+  where
 
 import Control.Monad.State.Strict
 import Data.List
+
 import Language.Haskell.TH
+
+data Record =
+  Record {foo :: Maybe Int
+         ,bar :: Char}
+
+example :: Record
+example = Record {foo=Just 123,bar='a'}
 
 -- | A presentation of a data structure.
 data Presentation
@@ -36,20 +51,49 @@ data Presentation
   | Rec String [(String,Presentation)]
   deriving (Show)
 
--- | The presentation generating monad.
-newtype P a = P { unP :: StateT [Dec] Q a}
+--------------------------------------------------------------------------------
+-- Printing monad
+
+-- | The presentation generating monad. Transforms over Q and spits
+-- out declarations.
+newtype P a = P { unP :: StateT PState Q a}
   deriving (Applicative,Monad,Functor)
 
+data PState =
+  PState {pDecls :: [(Name,Exp)]
+         ,pTypes :: [(Type,Exp)]
+         ,pTypesCache :: [(Type,Exp)]
+         ,pMakeDecls :: Bool}
+
 -- | Reify a name.
-reifyName :: Name -> P Info
-reifyName = P . lift . reify
+reifyP :: Name -> P Info
+reifyP = P . lift . reify
 
-data Record =
-  Record {foo :: Maybe Int
-         ,bar :: Char}
+-- | Declare a printer for the given type name, returning an
+-- expression referencing that printer.
+declareP :: Name -> P Exp -> P Exp
+declareP name func =
+  do st <- P get
+     unless (any ((==(funcName name)) . fst) (pDecls st))
+            (do e <- func
+                P (modify (\s -> s {pDecls = ((funcName name),e) : pDecls s})))
+     return (VarE (funcName name))
 
-example :: Record
-example = Record {foo=Just 123,bar='a'}
+-- | Given the name of a type Foo, make a function name like p_Foo.
+funcName :: Name -> Name
+funcName name = mkName ("p_" ++ concatMap normalize (show name))
+  where normalize c =
+          case c of
+            '_' -> "__"
+            '.' -> "_"
+            _ -> [c]
+
+-- | Make a declaration given the name and type.
+makeDec :: Name -> Exp -> Q Dec
+makeDec name e = return (ValD (VarP name) (NormalB e) [])
+
+--------------------------------------------------------------------------------
+-- Top-level functions
 
 -- | Present the given name.
 present :: Name -> Q Exp
@@ -58,8 +102,7 @@ present name =
      case result of
        Nothing -> fail ("The name \"" ++ show name ++ "\" isn't in scope.")
        Just (VarI _ ty _ _) ->
-         do func <- evalStateT (unP (makePresenter ty ty)) []
-            appE (return func) (varE name)
+         presentTy name ty
        _ -> help ["That name isn't a variable, we can only"
                  ,"present variables."]
   where try m =
@@ -89,15 +132,30 @@ presentIt =
               ,"    > X 123 'A'"
               ,"    > $presentIt"]
        Just (VarI _ ty _ _) ->
-         do func <- evalStateT (unP (makePresenter ty ty)) []
-            appE (return func)
-                 (varE name)
-       _ -> help ["That name isn't a variable, we can only"
-                 ,"present variables."]
+         presentTy name ty
+       _ -> help ["The name \"it\" isn't a variable, we can only"
+                 ,"present variables. This is a strange circumstance,"
+                 ,"consider reporting this as a problem."]
   where try m =
           recover (pure Nothing)
                   (fmap Just m)
         name = mkName "it"
+
+-- | Present a type.
+presentTy :: Name -> Type -> Q Exp
+presentTy name ty =
+  do (func,PState decls _ _ _) <-
+       runStateT (unP (do e <- makePresenter ty ty
+                          -- We do a first run without decl generation enabled,
+                          -- which avoids recursive types.
+                          -- Then we enable decl generation and re-generate.
+                          P (modify (\s -> s {pMakeDecls = True, pTypes = [], pTypesCache = pTypes s}))
+                          {-makePresenter ty ty-}
+                          return e))
+                 (PState [] [] [] False)
+     letE (map (uncurry makeDec) decls)
+          (appE (return func)
+                (varE name))
 
 help :: Monad m => [String] -> m a
 help ls =
@@ -115,132 +173,118 @@ help ls =
 
 makePresenter :: Type -> Type -> P Exp
 makePresenter originalType ty =
-  case ty of
-    AppT f a ->
-      AppE <$> (makePresenter originalType f)
-           <*> (makePresenter originalType a)
-    ConT name -> makeConPresenter originalType name
-    ForallT _vars _ctx ty' ->
-      makePresenter originalType ty'
-    SigT _ _ -> error ("Unsupported type: " ++ pprint ty ++ " (SigT)")
-    VarT _ ->
-      help ["Cannot present this type variable"
-           ,""
-           ,"    " ++ pprint ty
-           ,""
-           ,"from the type we're trying to present: "
-           ,""
-           ,"    " ++ pprint originalType
-           ,""
-           ,"Type variables present an ambiguity: we don't know"
-           ,"what to print for them. If your type is like this:"
-           ,""
-           ,"    Maybe a"
-           ,""
-           ,"You can try instead adding a type annotation to your"
-           ,"expression so that there are no type variables,"
-           ,"like this:"
-           ,""
-           ,"    > let it = Nothing :: Maybe ()"
-           ,"    > $presentIt"]
-    PromotedT _ -> error ("Unsupported type: " ++ pprint ty ++ " (PromotedT)")
-    TupleT _ -> error ("Unsupported type: " ++ pprint ty ++ " (TupleT)")
-    UnboxedTupleT _ ->
-      error ("Unsupported type: " ++ pprint ty ++ " (UnboxedTupleT)")
-    ArrowT -> error ("Unsupported type: " ++ pprint ty ++ " (ArrowT)")
-    EqualityT -> error ("Unsupported type: " ++ pprint ty ++ " (EqualityT)")
-    ListT -> error ("Unsupported type: " ++ pprint ty ++ " (ListT)")
-    PromotedTupleT _ ->
-      error ("Unsupported type: " ++ pprint ty ++ " (PromotedTupleT)")
-    PromotedNilT ->
-      error ("Unsupported type: " ++ pprint ty ++ " (PromotedNilT)")
-    PromotedConsT ->
-      error ("Unsupported type: " ++ pprint ty ++ " (PromotedConsT)")
-    StarT -> error ("Unsupported type: " ++ pprint ty ++ " (StarT)")
-    ConstraintT ->
-      error ("Unsupported type: " ++ pprint ty ++ " (ConstraintT)")
-    LitT _ -> error ("Unsupported type: " ++ pprint ty ++ " (LitT)")
+  do types <- P (gets pTypes)
+     case lookup ty types of
+       Nothing ->
+         do e <- go
+            P (modify (\s -> s { pTypes = (ty,e) : pTypes s}))
+            return e
+       Just e -> return e
+  where go = case ty of
+               AppT f a ->
+                 AppE <$> (makePresenter originalType f)
+                      <*> (makePresenter originalType a)
+               ConT name -> do makeDecls <- P (gets pMakeDecls)
+                               if makeDecls
+                                  then makeConPresenter originalType name
+                                  else return (VarE (funcName name))
+               ForallT _vars _ctx ty' ->
+                 makePresenter originalType ty'
+               SigT _ _ -> error ("Unsupported type: " ++ pprint ty ++ " (SigT)")
+               VarT _ ->
+                 help ["Cannot present this type variable"
+                      ,""
+                      ,"    " ++ pprint ty
+                      ,""
+                      ,"from the type we're trying to present: "
+                      ,""
+                      ,"    " ++ pprint originalType
+                      ,""
+                      ,"Type variables present an ambiguity: we don't know"
+                      ,"what to print for them. If your type is like this:"
+                      ,""
+                      ,"    Maybe a"
+                      ,""
+                      ,"You can try instead adding a type annotation to your"
+                      ,"expression so that there are no type variables,"
+                      ,"like this:"
+                      ,""
+                      ,"    > let it = Nothing :: Maybe ()"
+                      ,"    > $presentIt"]
+               PromotedT _ -> error ("Unsupported type: " ++ pprint ty ++ " (PromotedT)")
+               TupleT _ -> error ("Unsupported type: " ++ pprint ty ++ " (TupleT)")
+               UnboxedTupleT _ ->
+                 error ("Unsupported type: " ++ pprint ty ++ " (UnboxedTupleT)")
+               ArrowT -> error ("Unsupported type: " ++ pprint ty ++ " (ArrowT)")
+               EqualityT -> error ("Unsupported type: " ++ pprint ty ++ " (EqualityT)")
+               ListT -> error ("Unsupported type: " ++ pprint ty ++ " (ListT)")
+               PromotedTupleT _ ->
+                 error ("Unsupported type: " ++ pprint ty ++ " (PromotedTupleT)")
+               PromotedNilT ->
+                 error ("Unsupported type: " ++ pprint ty ++ " (PromotedNilT)")
+               PromotedConsT ->
+                 error ("Unsupported type: " ++ pprint ty ++ " (PromotedConsT)")
+               StarT -> error ("Unsupported type: " ++ pprint ty ++ " (StarT)")
+               ConstraintT ->
+                 error ("Unsupported type: " ++ pprint ty ++ " (ConstraintT)")
+               LitT _ -> error ("Unsupported type: " ++ pprint ty ++ " (LitT)")
 
+-- | Make a constructor presenter.
 makeConPresenter :: Type -> Name -> P Exp
 makeConPresenter originalType thisName =
-  do info <- reifyName thisName
+  do info <- reifyP thisName
      case info of
        TyConI dec ->
          case dec of
-           DataD _ctx _name tyvars cons _names ->
-             foldl
-               (\acc i -> ParensE <$> (LamE [VarP (tyvar i)] <$> acc))
-               (ParensE <$>
-                   (LamE
-                       [VarP a]
-                       <$> (CaseE (VarE a) <$>
-                              (mapM
-                                 (\con ->
-                                    case con of
-                                      NormalC name slots ->
-                                        let var = mkName . ("p"++) . show
-                                        in Match
-                                              (ConP name
-                                                     (map (VarP . var . fst)
-                                                          (zip [1..] slots)))
-                                                          <$>
-                                              (NormalB <$>
-                                                  (AppE
-                                                   (AppE
-                                                        (ConE (mkName "Alg"))
-                                                        (nameE name)) <$>
-                                                              (ListE <$>
-                                                                 (mapM
-                                                                       (\(i,(_strictness,ty)) ->
-                                                                          case ty of
-                                                                            VarT vname ->
-                                                                              case find (tyVarMatch vname . fst)
-                                                                                        (zip tyvars [1..]) of
-                                                                                Nothing -> error "Invalid type variable in constructor."
-                                                                                Just (_,x) ->
-                                                                                  return (AppE (VarE (tyvar x))
-                                                                                               (VarE (var i)))
-                                                                            ty' ->
-                                                                              AppE <$> (makePresenter originalType ty')
-                                                                                      <*> (pure (VarE (var i))))
-                                                                       (zip [1..] slots))))) <*>
-                                              pure []
-                                      RecC name (fields :: [(Name,Strict,Type)]) ->
-                                        let var = mkName . ("p"++) . show
-                                        in Match
-                                              (ConP name
-                                                     (map (VarP . var . fst)
-                                                          (zip [1..] fields))) <$>
-                                              (NormalB
-                                                  <$> (AppE (AppE
-                                                                 (ConE (mkName "Rec"))
-                                                                 (nameE name)) <$>
-                                                             (ListE <$>
-                                                                 (mapM
-                                                                       (\(i,(_name,_strictness,ty)) ->
-                                                                          TupE <$>
-                                                                                (sequence [pure (nameE name)
-                                                                                 ,case ty of
-                                                                                    VarT vname ->
-                                                                                      case find (tyVarMatch vname . fst)
-                                                                                                (zip tyvars [1..]) of
-                                                                                        Nothing -> error "Invalid type variable in constructor."
-                                                                                        Just (_,x) ->
-                                                                                          pure (AppE (VarE (tyvar x))
-                                                                                                     (VarE (var i)))
-                                                                                    ty' ->
-                                                                                      AppE <$> (makePresenter originalType ty')
-                                                                                              <*>  pure (VarE (var i))]))
-                                                                       (zip [1..] fields))))) <*>
-                                              pure []
-                                      _ ->
-                                        case con of
-                                          NormalC _ _ -> error ("NormalC")
-                                          RecC _ _ -> error ("RecC")
-                                          InfixC _ _ _ -> error ("InfixC")
-                                          ForallC _ _ _ -> error ("ForallC"))
-                                 cons))))
-               (reverse (zipWith const [1..] tyvars))
+           DataD _ctx typeName tyvars cons _names ->
+             let ret = foldl
+                         (\acc i -> ParensE <$> (LamE [VarP (tyvar i)] <$> acc))
+                         (ParensE <$>
+                             (LamE
+                                 [VarP a]
+                                 <$> (CaseE (VarE a) <$>
+                                        (mapM
+                                           (\con ->
+                                              case con of
+                                                NormalC name slots ->
+                                                  let var = mkName . ("p"++) . show
+                                                  in Match
+                                                        (ConP name
+                                                               (map (VarP . var . fst)
+                                                                    (zip [1..] slots)))
+                                                                    <$>
+                                                        (NormalB <$>
+                                                            (AppE
+                                                             (AppE
+                                                                  (ConE (mkName "Alg"))
+                                                                  (nameE name)) <$>
+                                                                        (ListE <$>
+                                                                           (mapM (\(i,(_strictness,ty)) ->
+                                                                                    case ty of
+                                                                                      VarT vname ->
+                                                                                        case find (tyVarMatch vname . fst)
+                                                                                                  (zip tyvars [1..]) of
+                                                                                          Nothing -> error "Invalid type variable in constructor."
+                                                                                          Just (_,x) ->
+                                                                                            return (AppE (VarE (tyvar x))
+                                                                                                         (VarE (var i)))
+                                                                                      ty' ->
+                                                                                        do P (modify (\s -> s { pTypes = pTypesCache s}))
+                                                                                           e <- AppE <$> (makePresenter originalType ty')
+                                                                                                        <*> (pure (VarE (var i)))
+                                                                                           P (modify (\s -> s { pTypes = []}))
+                                                                                           return e)
+                                                                                 (zip [1..] slots))))) <*>
+                                                        pure []
+                                                _ ->
+                                                  case con of
+                                                    NormalC _ _ -> error ("NormalC")
+                                                    RecC _ _ -> error ("RecC")
+                                                    InfixC _ _ _ -> error ("InfixC")
+                                                    ForallC _ _ _ -> error ("ForallC"))
+                                           cons))))
+                         (reverse (zipWith const [1..] tyvars))
+             in declareP typeName ret
            TySynD _name _tyvars _ty ->
              pure (ParensE (LamE [WildP]
                                  (AppE
