@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 
 -- LAST THING I WAS TRYING TO FIX:
 
@@ -20,6 +21,8 @@
 
 --
 -- Remaining work:
+--
+-- TODO: need to add type-signatures to retain let generalization
 --
 -- TODO: handle recursive types
 --
@@ -308,28 +311,10 @@ makeDataD originalType typeVariables constructors =
                 express (AppT f x) =
                   AppE <$> express f <*> express x
                 express ty@ConT {} =
-                  makePresenter originalType ty
-
-x = 1
-           {-let walk ty =
-                 case ty of
-                   VarT vname ->
-                     do case find (tyVarMatch vname) typeVariables of
-                          Nothing ->
-                            error "Invalid type variable in constructor."
-                          Just x ->
-                            return (AppE (VarE (present_X x))
-                                         (VarE (slot_X i)))
-                   ty' ->
-                     do P (modify (\s -> s {pTypes = pTypesCache s}))
-                        P (lift (runIO (putStrLn ("makePresenter for: " ++
-                                                  show ty'))))
-                        e <-
-                          AppE <$> (makePresenter originalType ty') <*>
-                          (pure (VarE (slot_X i)))
-                        P (modify (\s -> s {pTypes = []}))
-                        return e
-           in walk typ-}
+                  do P (modify (\s -> s {pTypes = pTypesCache s}))
+                     e <- makePresenter originalType ty
+                     P (modify (\s -> s {pTypes = []}))
+                     return e
 
 slot_X :: Int -> Name
 slot_X = mkName . ("slot_" ++) . show
