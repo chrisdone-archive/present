@@ -5,6 +5,9 @@
 * TODO Primitive types (Char, Int, etc.)
 * TODO Cleanup
 * TODO Remove state-monad depdency
+* DONE Support extension via classes
+  CLOSED: [2016-02-24 Wed 23:15]
+  - State "DONE"       from "TODO"       [2016-02-24 Wed 23:15]
 * DONE Need to add type-signatures to retain let generalization
   CLOSED: [2016-02-24 Wed 22:35]
   - State "DONE"       from "TODO"       [2016-02-24 Wed 22:35]

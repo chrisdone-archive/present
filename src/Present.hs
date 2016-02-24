@@ -15,6 +15,7 @@ module Present
   where
 
 import Control.Monad.State.Strict
+import Data.Maybe
 import Language.Haskell.TH
 
 --------------------------------------------------------------------------------
@@ -22,18 +23,61 @@ import Language.Haskell.TH
 
 -- | A presentation of a data structure.
 data Presentation
-  = Primitive String
+  = Integer String !String
   | Alg String
         [Presentation]
   | Rec String [(String,Presentation)]
   deriving (Show)
 
+class Present a where
+  present :: a -> Presentation
+
+class Present1 a where
+  present1
+    :: (x -> Presentation) -> a x -> Presentation
+
+instance Present1 Maybe where
+  present1 presentA x = case x of
+                          Nothing -> Alg "Nothing!!" []
+                          Just a -> Alg "Just!!" [presentA a]
+
+class Present2 a where
+  present2
+    :: (x -> Presentation) -> (y -> Presentation) -> a -> Presentation
+
+class Present3 a where
+  present3 :: (x -> Presentation)
+           -> (y -> Presentation)
+           -> (z -> Presentation)
+           -> a
+           -> Presentation
+
+class Present4 a where
+  present4 :: (x -> Presentation)
+           -> (y -> Presentation)
+           -> (z -> Presentation)
+           -> (z0 -> Presentation)
+           -> a x y z z0
+           -> Presentation
+
+class Present5 a where
+  present5 :: (x -> Presentation)
+           -> (y -> Presentation)
+           -> (z -> Presentation)
+           -> (z0 -> Presentation)
+           -> (z1 -> Presentation)
+           -> a x y z z0
+           -> Presentation
+
+instance Present Int where
+  present = Integer "Int" . show
+
 --------------------------------------------------------------------------------
 -- Top-level functions
 
 -- | Present the given name.
-present :: Name -> Q Exp
-present name =
+presentName :: Name -> Q Exp
+presentName name =
   do result <- try (reify name)
      case result of
        Nothing -> fail ("The name \"" ++ show name ++ "\" isn't in scope.")
@@ -80,7 +124,8 @@ presentIt =
 -- | Present a type.
 presentTy :: Name -> Type -> Q Exp
 presentTy name ty =
-  do (func,PState decls _ _ _) <-
+  do instances <- getPresentInstances
+     (func,PState decls _ _ _ _) <-
        runStateT (unP (do e <- makePresenter ty ty
                           -- We do a first run without decl generation enabled,
                           -- which avoids recursive types.
@@ -92,11 +137,33 @@ presentTy name ty =
                                          ,pTypesCache = pTypes s}))
                           _ <- makePresenter ty ty
                           return e))
-                 (PState [] [] [] False)
+                 (PState [] [] [] False instances)
      ds <- mapM (\(n,t,ex) -> makeDec n t ex) decls
      letE (map return (concat ds))
           (appE (return func)
                 (varE name))
+
+-- | Get a mapping from type to instance methods of instances of
+-- Present, Present1, etc.
+getPresentInstances :: Q [(Name,Name)]
+getPresentInstances =
+  do p <- getFor ''Present
+     p1 <- getFor ''Present1
+     p2 <- getFor ''Present2
+     p3 <- getFor ''Present3
+     p4 <- getFor ''Present4
+     return (concat [p,p1,p2,p3,p4])
+  where getFor cls =
+          do result <- reify cls
+             case result of
+               ClassI (ClassD _ _ _ _ [SigD method _]) instances ->
+                 return (mapMaybe (\i ->
+                                     case i of
+                                       InstanceD _ (AppT (ConT className) (ConT typeName)) _ ->
+                                         Just (typeName,method)
+                                       _ -> Nothing)
+                                  instances)
+               _ -> return []
 
 --------------------------------------------------------------------------------
 -- Presentation monad
@@ -111,7 +178,8 @@ data PState =
   PState {pDecls :: [(Name,Type,Exp)]
          ,pTypes :: [(Type,Exp)]
          ,pTypesCache :: [(Type,Exp)]
-         ,pMakeDecls :: Bool}
+         ,pMakeDecls :: Bool
+         ,pInstances :: [(Name,Name)]}
 
 -- | Reify a name.
 reifyP :: Name -> P Info
@@ -243,12 +311,17 @@ makeConPresenter originalType thisName =
        TyConI dec ->
          case dec of
            DataD _ctx typeName typeVariables constructors _names ->
-             declareP typeName
-                      typeVariables
-                      (makeDataD originalType typeVariables constructors)
+             do instances <- P (gets pInstances)
+                case lookup typeName instances of
+                  Just method ->
+                    declareP typeName typeVariables (P (lift (varE method)))
+                  Nothing ->
+                    declareP typeName
+                             typeVariables
+                             (makeDataD originalType typeVariables constructors)
            TySynD _name _typeVariables _ty ->
              pure (ParensE (LamE [WildP]
-                                 (AppE (ConE (mkName "Primitive"))
+                                 (AppE (ConE (mkName "Synonym"))
                                        (LitE (StringL "type synonym")))))
            x ->
              error ("Unsupported type declaration: " ++
