@@ -1,3 +1,4 @@
+{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -92,7 +93,8 @@ presentTy name ty =
                           _ <- makePresenter ty ty
                           return e))
                  (PState [] [] [] False)
-     letE (map (uncurry makeDec) decls)
+     ds <- mapM (\(n,t,ex) -> makeDec n t ex) decls
+     letE (map return (concat ds))
           (appE (return func)
                 (varE name))
 
@@ -106,7 +108,7 @@ newtype P a = P { unP :: StateT PState Q a}
 
 -- | The presentation state.
 data PState =
-  PState {pDecls :: [(Name,Exp)]
+  PState {pDecls :: [(Name,Type,Exp)]
          ,pTypes :: [(Type,Exp)]
          ,pTypesCache :: [(Type,Exp)]
          ,pMakeDecls :: Bool}
@@ -117,13 +119,36 @@ reifyP = P . lift . reify
 
 -- | Declare a printer for the given type name, returning an
 -- expression referencing that printer.
-declareP :: Name -> P Exp -> P Exp
-declareP name func =
+declareP :: Name -> [TyVarBndr] -> P Exp -> P Exp
+declareP name (map unkind -> tyvars) func =
   do st <- P get
-     unless (any ((==(present_T name)) . fst) (pDecls st))
+     unless (any ((== (present_T name)) . fst3)
+                 (pDecls st))
             (do e <- func
-                P (modify (\s -> s {pDecls = ((present_T name),e) : pDecls s})))
+                P (modify (\s ->
+                             s {pDecls = ((present_T name),ty,e) : pDecls s})))
      return (VarE (present_T name))
+  where ty =
+          ForallT (map unkind tyvars)
+                  []
+                  (foldr funTy
+                         (presentT (foldl AppT
+                                          (ConT name)
+                                          (map toTy tyvars)))
+                         (map (presentT . toTy) tyvars))
+          where presentT t = funTy t (ConT ''Presentation)
+                funTy x y = AppT (AppT ArrowT x) y
+                toTy t =
+                  case t of
+                    PlainTV n -> VarT n
+                    KindedTV n k -> SigT (VarT n) k
+        fst3 (x,_,_) = x
+
+-- | Strip out redundant kinds which unnecessarily cause
+-- KindSignatures to be required.
+unkind :: TyVarBndr -> TyVarBndr
+unkind (KindedTV n StarT) = PlainTV n
+unkind x = x
 
 -- | An error has occured so we'll display something helpful.
 help :: Monad m => [String] -> m a
@@ -203,8 +228,12 @@ makePresenter originalType ty =
                LitT _ -> error ("Unsupported type: " ++ pprint ty ++ " (LitT)")
 
 -- | Make a declaration given the name and type.
-makeDec :: Name -> Exp -> Q Dec
-makeDec name e = return (ValD (VarP name) (NormalB e) [])
+makeDec :: Name -> Type -> Exp -> Q [Dec]
+makeDec name ty e =
+  return [SigD name ty
+         ,ValD (VarP name)
+               (NormalB e)
+               []]
 
 -- | Make a constructor presenter.
 makeConPresenter :: Type -> Name -> P Exp
@@ -215,6 +244,7 @@ makeConPresenter originalType thisName =
          case dec of
            DataD _ctx typeName typeVariables constructors _names ->
              declareP typeName
+                      typeVariables
                       (makeDataD originalType typeVariables constructors)
            TySynD _name _typeVariables _ty ->
              pure (ParensE (LamE [WildP]

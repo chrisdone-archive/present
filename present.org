@@ -5,7 +5,9 @@
 * TODO Primitive types (Char, Int, etc.)
 * TODO Cleanup
 * TODO Remove state-monad depdency
-* TODO Need to add type-signatures to retain let generalization
+* DONE Need to add type-signatures to retain let generalization
+  CLOSED: [2016-02-24 Wed 22:35]
+  - State "DONE"       from "TODO"       [2016-02-24 Wed 22:35]
 * TODO Refactor the first-pass/second-pass gubbins
 * TODO Consider defaulting common classes like Num, IsString, etc.
 * TODO Consider supporting ambiguous vars
