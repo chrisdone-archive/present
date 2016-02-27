@@ -1,3 +1,10 @@
+* DONE Investigate a :present cmd in GHCi
+  CLOSED: [2016-02-27 Sat 21:07]
+  - Note taken on [2016-02-27 Sat 21:07] \\
+    Works!
+  - State "DONE"       from "TODO"       [2016-02-27 Sat 21:07]
+I think it would be a perfect solution to whether to produce e.g. a
+plain-text or terminal presentation.
 * TODO Write test suite
 * TODO Newtypes, records
 * TODO Lists, tuples

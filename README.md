@@ -35,3 +35,9 @@ it :: Either Char Int
         present_GHC_Types_Char present_GHC_Types_Int it
 Alg "Data.Either.Right" [Alg "GHC.Types.I#" [Primitive "GHC.Prim.Int#"]]
 ```
+
+## From GHCi
+
+``` haskell
+:def present \e -> return ("let it = " ++ e ++ "\n$presentIt")
+```

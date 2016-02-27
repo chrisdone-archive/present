@@ -27,6 +27,7 @@ data Presentation
   | Alg String
         [Presentation]
   | Rec String [(String,Presentation)]
+  | Primitive String
   deriving (Show)
 
 class Present a where
@@ -328,7 +329,7 @@ makeConPresenter originalType thisName =
                     pprint x ++ " (" ++ show x ++ ")")
        PrimTyConI name _arity _unlifted ->
          pure (ParensE (LamE [WildP]
-                             (AppE (ConE (mkName "Primitive"))
+                             (AppE (ConE 'Primitive)
                                    (nameE name))))
        _ -> error ("Unsupported type for presenting: " ++ show thisName)
 
