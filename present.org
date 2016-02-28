@@ -1,3 +1,4 @@
+* TODO Make lazy interface (IDs and such)
 * TODO Write test suite
 * TODO Newtypes, records
 * TODO Lists, tuples

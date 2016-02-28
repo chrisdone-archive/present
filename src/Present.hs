@@ -23,7 +23,7 @@ import Language.Haskell.TH
 
 -- | A presentation of a data structure.
 data Presentation
-  = Integer String !String
+  = Integer String String
   | Alg String
         [Presentation]
   | Rec String [(String,Presentation)]
