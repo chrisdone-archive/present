@@ -5,35 +5,36 @@ I gave up on generating class instances from inside the REPL, instead
 generating code on the fly with explicit dictionary passing:
 
 ``` haskell
-λ> Right 5 :: Either Char Int
-Right 5
-it :: Either Char Int
-(0.00 secs, 1037696 bytes)
-λ> $presentIt
-<interactive>:2100:1-10: Splicing expression
+λ> data X = X Char Int
+data X = X Char Int
+(0.00 secs, 510712 bytes)
+λ> :present X 'a' 123
+
+<interactive>:2650:5: Warning:
+    This binding for ‘it’ shadows the existing binding
+      defined at <interactive>:2648:1
+it :: X
+(0.00 secs, 517656 bytes)
+<interactive>:2650:1-10: Splicing expression
     presentIt
   ======>
     let
-      present_GHC_Types_Int
+      present_Ghci3_X :: X -> Presentation
+      present_GHC_Types_Int :: Int -> Presentation
+      present_GHC_Types_Char :: Char -> Presentation
+      present_Ghci3_X
         = \case {
-            ghc-prim-0.4.0.0:GHC.Types.I# slot_1
-              -> Alg "GHC.Types.I#" [(\ _ -> Primitive "GHC.Prim.Int#") slot_1] }
-      present_GHC_Types_Char
-        = \case {
-            ghc-prim-0.4.0.0:GHC.Types.C# slot_1
+            X slot_1 slot_2
               -> Alg
-                   "GHC.Types.C#" [(\ _ -> Primitive "GHC.Prim.Char#") slot_1] }
-      present_Data_Either_Either
-        = (\ present_a_1627409552
-             -> (\ present_b_1627409553
-                   -> \case {
-                        Left slot_1 -> Alg "Data.Either.Left" [present_a_1627409552 slot_1]
-                        Right slot_1
-                          -> Alg "Data.Either.Right" [present_b_1627409553 slot_1] }))
-    in
-      present_Data_Either_Either
-        present_GHC_Types_Char present_GHC_Types_Int it
-Alg "Data.Either.Right" [Alg "GHC.Types.I#" [Primitive "GHC.Prim.Int#"]]
+                   "Ghci3.X"
+                   [present_GHC_Types_Char slot_1, present_GHC_Types_Int slot_2] }
+      present_GHC_Types_Int = present
+      present_GHC_Types_Char = present
+    in present_Ghci3_X it
+Alg "Ghci3.X" [Integer "Char" "a",Integer "Int" "123"]
+it :: Presentation
+(0.01 secs, 3098272 bytes)
+λ>
 ```
 
 ## From GHCi

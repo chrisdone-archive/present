@@ -30,49 +30,6 @@ data Presentation
   | Primitive String
   deriving (Show)
 
-class Present a where
-  present :: a -> Presentation
-
-class Present1 a where
-  present1
-    :: (x -> Presentation) -> a x -> Presentation
-
-instance Present1 Maybe where
-  present1 presentA x = case x of
-                          Nothing -> Alg "Nothing!!" []
-                          Just a -> Alg "Just!!" [presentA a]
-
-class Present2 a where
-  present2
-    :: (x -> Presentation) -> (y -> Presentation) -> a -> Presentation
-
-class Present3 a where
-  present3 :: (x -> Presentation)
-           -> (y -> Presentation)
-           -> (z -> Presentation)
-           -> a
-           -> Presentation
-
-class Present4 a where
-  present4 :: (x -> Presentation)
-           -> (y -> Presentation)
-           -> (z -> Presentation)
-           -> (z0 -> Presentation)
-           -> a x y z z0
-           -> Presentation
-
-class Present5 a where
-  present5 :: (x -> Presentation)
-           -> (y -> Presentation)
-           -> (z -> Presentation)
-           -> (z0 -> Presentation)
-           -> (z1 -> Presentation)
-           -> a x y z z0
-           -> Presentation
-
-instance Present Int where
-  present = Integer "Int" . show
-
 --------------------------------------------------------------------------------
 -- Top-level functions
 
@@ -405,3 +362,50 @@ typeVariableName (KindedTV name _) = name
 -- | Make a string expression from a name.
 nameE :: Name -> Exp
 nameE = LitE . StringL . show
+
+--------------------------------------------------------------------------------
+-- Extension classes
+
+class Present a where
+  present :: a -> Presentation
+
+class Present1 a where
+  present1
+    :: (x -> Presentation) -> a x -> Presentation
+
+class Present2 a where
+  present2
+    :: (x -> Presentation) -> (y -> Presentation) -> a -> Presentation
+
+class Present3 a where
+  present3 :: (x -> Presentation)
+           -> (y -> Presentation)
+           -> (z -> Presentation)
+           -> a
+           -> Presentation
+
+class Present4 a where
+  present4 :: (x -> Presentation)
+           -> (y -> Presentation)
+           -> (z -> Presentation)
+           -> (z0 -> Presentation)
+           -> a x y z z0
+           -> Presentation
+
+class Present5 a where
+  present5 :: (x -> Presentation)
+           -> (y -> Presentation)
+           -> (z -> Presentation)
+           -> (z0 -> Presentation)
+           -> (z1 -> Presentation)
+           -> a x y z z0
+           -> Presentation
+
+--------------------------------------------------------------------------------
+-- Customized printers
+
+instance Present Int where
+  present = Integer "Int" . show
+
+instance Present Char where
+  present = Integer "Char" . return
