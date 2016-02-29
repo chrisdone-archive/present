@@ -26,7 +26,6 @@ module Present
 
 import Control.Monad.State.Strict
 import Data.Int
-import Data.List
 import Data.Maybe
 import Data.Word
 import Language.Haskell.TH
@@ -459,31 +458,3 @@ instance Present Word16 where present = Integer "Word16" . show
 instance Present Word32 where present = Integer "Word32" . show
 instance Present Word64 where present = Integer "Word64" . show
 instance Present Word8 where present = Integer "Word8" . show
-
--- Tuples
-
--- | Generate a tuple presentation from a a list of presentations of a
--- tuple's slots.
-presentTuple :: [Presentation] -> Presentation
-presentTuple xs =
-  Tuple ("(" ++
-         intercalate ","
-                     (map presentationType xs) ++
-         ")")
-        xs
-
-instance Present2 (,) where
-  present2 px py (x,y) = presentTuple [px x,py y]
-
-instance Present3 (,,) where
-  present3 px py pz (x,y,z) = presentTuple [px x,py y,pz z]
-
-instance Present4 (,,,) where
-  present4 px py pz pa (x,y,z,a) = presentTuple [px x,py y,pz z,pa a]
-
-instance Present5 (,,,,) where
-  present5 px py pz pa pb (x,y,z,a,b) = presentTuple [px x,py y,pz z,pa a,pb b]
-
-instance Present6 (,,,,,) where
-  present6 px py pz pa pb pc (x,y,z,a,b,c) =
-    presentTuple [px x,py y,pz z,pa a,pb b,pc c]
