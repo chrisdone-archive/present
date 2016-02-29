@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -6,16 +7,28 @@
 -- | Generate presentations for a data type.
 
 module Present
-  (-- * Presentation functions
+  (-- * Presenting functions
    presentIt
-  ,present
+  ,presentName
   ,presentTy
+   -- * Presentation accessors
+  ,presentationType
   -- * Types
-  ,Presentation(..))
+  ,Presentation(..)
+  -- * Customization classes
+  ,Present1(..)
+  ,Present2(..)
+  ,Present3(..)
+  ,Present4(..)
+  ,Present5(..)
+  ,Present6(..))
   where
 
 import Control.Monad.State.Strict
+import Data.Int
+import Data.List
 import Data.Maybe
+import Data.Word
 import Language.Haskell.TH
 
 --------------------------------------------------------------------------------
@@ -24,11 +37,23 @@ import Language.Haskell.TH
 -- | A presentation of a data structure.
 data Presentation
   = Integer String String
-  | Alg String
-        [Presentation]
+  | Char String String
+  | Alg String [Presentation]
   | Rec String [(String,Presentation)]
+  | Tuple String [Presentation]
   | Primitive String
   deriving (Show)
+
+-- | Get the Haskell type of the value presented.
+presentationType :: Presentation -> String
+presentationType =
+  \case
+    Integer ty _ -> ty
+    Char ty _ -> ty
+    Alg ty _ -> ty
+    Rec ty _ -> ty
+    Tuple ty _ -> ty
+    Primitive ty -> ty
 
 --------------------------------------------------------------------------------
 -- Top-level functions
@@ -117,7 +142,7 @@ getPresentInstances =
                ClassI (ClassD _ _ _ _ [SigD method _]) instances ->
                  return (mapMaybe (\i ->
                                      case i of
-                                       InstanceD _ (AppT (ConT className) (ConT typeName)) _ ->
+                                       InstanceD _ (AppT (ConT _className) (ConT typeName)) _ ->
                                          Just (typeName,method)
                                        _ -> Nothing)
                                   instances)
@@ -375,13 +400,13 @@ class Present1 a where
 
 class Present2 a where
   present2
-    :: (x -> Presentation) -> (y -> Presentation) -> a -> Presentation
+    :: (x -> Presentation) -> (y -> Presentation) -> a x y -> Presentation
 
 class Present3 a where
   present3 :: (x -> Presentation)
            -> (y -> Presentation)
            -> (z -> Presentation)
-           -> a
+           -> a x y z
            -> Presentation
 
 class Present4 a where
@@ -398,14 +423,67 @@ class Present5 a where
            -> (z -> Presentation)
            -> (z0 -> Presentation)
            -> (z1 -> Presentation)
-           -> a x y z z0
+           -> a x y z z0 z1
+           -> Presentation
+
+class Present6 a where
+  present6 :: (x -> Presentation)
+           -> (y -> Presentation)
+           -> (z -> Presentation)
+           -> (z0 -> Presentation)
+           -> (z1 -> Presentation)
+           -> (z2 -> Presentation)
+           -> a x y z z0 z1 z2
            -> Presentation
 
 --------------------------------------------------------------------------------
 -- Customized printers
 
-instance Present Int where
-  present = Integer "Int" . show
+-- Characters
 
-instance Present Char where
-  present = Integer "Char" . return
+instance Present Char where present = Char "Char" . return
+
+-- Integers
+
+instance Present Integer where present = Integer "Integer" . show
+instance Present Int where present = Integer "Int" . show
+instance Present Int16 where present = Integer "Int16" . show
+instance Present Int32 where present = Integer "Int32" . show
+instance Present Int64 where present = Integer "Int64" . show
+instance Present Int8 where present = Integer "Int8" . show
+
+-- Words
+
+instance Present Word where present = Integer "Word" . show
+instance Present Word16 where present = Integer "Word16" . show
+instance Present Word32 where present = Integer "Word32" . show
+instance Present Word64 where present = Integer "Word64" . show
+instance Present Word8 where present = Integer "Word8" . show
+
+-- Tuples
+
+-- | Generate a tuple presentation from a a list of presentations of a
+-- tuple's slots.
+presentTuple :: [Presentation] -> Presentation
+presentTuple xs =
+  Tuple ("(" ++
+         intercalate ","
+                     (map presentationType xs) ++
+         ")")
+        xs
+
+instance Present2 (,) where
+  present2 px py (x,y) = presentTuple [px x,py y]
+
+instance Present3 (,,) where
+  present3 px py pz (x,y,z) = presentTuple [px x,py y,pz z]
+
+instance Present4 (,,,) where
+  present4 px py pz pa (x,y,z,a) = presentTuple [px x,py y,pz z,pa a]
+
+instance Present5 (,,,,) where
+  present5 px py pz pa pb (x,y,z,a,b) = presentTuple [px x,py y,pz z,pa a,pb b]
+
+instance Present6 (,,,,,) where
+  present6 px py pz pa pb pc (x,y,z,a,b,c) =
+    presentTuple [px x,py y,pz z,pa a,pb b,pc c]
