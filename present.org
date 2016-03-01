@@ -1,9 +1,10 @@
+* TODO Add type display to Alg, Rec, Tuple output
 * TODO Make lazy interface (IDs and such)
 * TODO Write test suite
 * TODO Newtypes, records
 * TODO Lists, tuples
+  CLOCK: [2016-03-01 Tue 15:23]--[2016-03-01 Tue 16:02] =>  0:39
 * TODO Type-aliases
-* TODO Primitive types (Char, Int, etc.)
 * TODO Cleanup
 * TODO Remove state-monad depdency
 * TODO Refactor the first-pass/second-pass gubbins
@@ -26,3 +27,7 @@ plain-text or terminal presentation.
 * DONE Need to add type-signatures to retain let generalization
   CLOSED: [2016-02-24 Wed 22:35]
   - State "DONE"       from "TODO"       [2016-02-24 Wed 22:35]
+* DONE Primitive types (Char, Int, etc.)
+  CLOSED: [2016-03-01 Tue 15:23]
+  - State "DONE"       from "TODO"       [2016-03-01 Tue 15:23]
+  CLOCK: [2016-03-01 Tue 15:07]--[2016-03-01 Tue 15:23] =>  0:16

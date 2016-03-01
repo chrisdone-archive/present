@@ -16,6 +16,7 @@ module Present
   -- * Types
   ,Presentation(..)
   -- * Customization classes
+  ,Present0(..)
   ,Present1(..)
   ,Present2(..)
   ,Present3(..)
@@ -26,6 +27,7 @@ module Present
 
 import Control.Monad.State.Strict
 import Data.Int
+import Data.List
 import Data.Maybe
 import Data.Word
 import Language.Haskell.TH
@@ -37,8 +39,8 @@ import Language.Haskell.TH
 data Presentation
   = Integer String String
   | Char String String
-  | Alg String [Presentation]
-  | Rec String [(String,Presentation)]
+  | Alg String String [Presentation]
+  | Rec String String [(String,Presentation)]
   | Tuple String [Presentation]
   | Primitive String
   deriving (Show)
@@ -49,8 +51,8 @@ presentationType =
   \case
     Integer ty _ -> ty
     Char ty _ -> ty
-    Alg ty _ -> ty
-    Rec ty _ -> ty
+    Alg ty _ _  -> ty
+    Rec ty _ _ -> ty
     Tuple ty _ -> ty
     Primitive ty -> ty
 
@@ -63,10 +65,9 @@ presentName name =
   do result <- try (reify name)
      case result of
        Nothing -> fail ("The name \"" ++ show name ++ "\" isn't in scope.")
-       Just (VarI _ ty _ _) ->
-         presentTy name ty
-       _ -> help ["That name isn't a variable, we can only"
-                 ,"present variables."]
+       Just (VarI _ ty _ _) -> presentTy name ty
+       _ ->
+         help ["That name isn't a variable, we can only","present variables."]
   where try m =
           recover (pure Nothing)
                   (fmap Just m)
@@ -129,12 +130,12 @@ presentTy name ty =
 -- Present, Present1, etc.
 getPresentInstances :: Q [(Name,Name)]
 getPresentInstances =
-  do p <- getFor ''Present
+  do p0 <- getFor ''Present0
      p1 <- getFor ''Present1
      p2 <- getFor ''Present2
      p3 <- getFor ''Present3
      p4 <- getFor ''Present4
-     return (concat [p,p1,p2,p3,p4])
+     return (concat [p0,p1,p2,p3,p4])
   where getFor cls =
           do result <- reify cls
              case result of
@@ -169,8 +170,8 @@ reifyP = P . lift . reify
 
 -- | Declare a printer for the given type name, returning an
 -- expression referencing that printer.
-declareP :: Name -> [TyVarBndr] -> P Exp -> P Exp
-declareP name (map unkind -> tyvars) func =
+declareP :: Name -> Name -> [TyVarBndr] -> P Exp -> P Exp
+declareP name tyname (map unkind -> tyvars) func =
   do st <- P get
      unless (any ((== (present_T name)) . fst3)
                  (pDecls st))
@@ -183,7 +184,7 @@ declareP name (map unkind -> tyvars) func =
                   []
                   (foldr funTy
                          (presentT (foldl AppT
-                                          (ConT name)
+                                          (ConT tyname)
                                           (map toTy tyvars)))
                          (map (presentT . toTy) tyvars))
           where presentT t = funTy t (ConT ''Presentation)
@@ -260,7 +261,7 @@ makePresenter originalType ty =
                       ,"    > let it = Nothing :: Maybe ()"
                       ,"    > $presentIt"]
                PromotedT _ -> error ("Unsupported type: " ++ pprint ty ++ " (PromotedT)")
-               TupleT _ -> error ("Unsupported type: " ++ pprint ty ++ " (TupleT)")
+               TupleT arity -> makeTuplePresenter originalType arity
                UnboxedTupleT _ ->
                  error ("Unsupported type: " ++ pprint ty ++ " (UnboxedTupleT)")
                ArrowT -> error ("Unsupported type: " ++ pprint ty ++ " (ArrowT)")
@@ -285,6 +286,30 @@ makeDec name ty e =
                (NormalB e)
                []]
 
+-- | Make a tuple presenter.
+makeTuplePresenter :: Type -> Int -> P Exp
+makeTuplePresenter originalType arity =
+  declareP (mkName ("Tuple" ++ show arity))
+           (mkName ("(" ++
+                    intercalate
+                      ","
+                      (map (const "")
+                           ([1 .. arity])) ++
+                    ")"))
+           (map (PlainTV . slot_X)
+                [1 .. arity])
+           (P (lift (parensE (foldl (\inner a -> lamE [varP a] inner)
+                                    (lamE [tupP (map (varP . slot_X)
+                                                     [1 .. arity])]
+                                          [|Tuple "<TODO>"
+                                                  $(listE (map (\i ->
+                                                                  appE (varE (makePrinterI i))
+                                                                       (varE (slot_X i)))
+                                                               [1 .. arity]))|])
+                                    (reverse printers)))))
+  where printers = map makePrinterI [1 .. arity]
+        makePrinterI = present_X . mkName . show
+
 -- | Make a constructor presenter.
 makeConPresenter :: Type -> Name -> P Exp
 makeConPresenter originalType thisName =
@@ -293,14 +318,18 @@ makeConPresenter originalType thisName =
        TyConI dec ->
          case dec of
            DataD _ctx typeName typeVariables constructors _names ->
-             do instances <- P (gets pInstances)
-                case lookup typeName instances of
-                  Just method ->
-                    declareP typeName typeVariables (P (lift (varE method)))
-                  Nothing ->
-                    declareP typeName
-                             typeVariables
-                             (makeDataD originalType typeVariables constructors)
+             case lookup typeName builtInPresenters of
+               Just presentE ->
+                 declareP typeName typeName typeVariables (P (lift presentE))
+               Nothing ->
+                 do instances <- P (gets pInstances)
+                    case lookup typeName instances of
+                      Just method ->
+                        declareP typeName typeName typeVariables (P (lift (varE method)))
+                      Nothing ->
+                        declareP typeName typeName
+                                 typeVariables
+                                 (makeDataD originalType typeVariables constructors)
            TySynD _name _typeVariables _ty ->
              pure (ParensE (LamE [WildP]
                                  (AppE (ConE (mkName "Synonym"))
@@ -338,7 +367,8 @@ makeDataD originalType typeVariables constructors =
                              (zip [1 ..] slots)))
                 matchBody =
                   (NormalB <$>
-                   (AppE (AppE (ConE (mkName "Alg"))
+                   (AppE (AppE (AppE (ConE (mkName "Alg"))
+                                     (LitE (StringL "<TODO>")))
                                (nameE name)) <$>
                     (ListE <$> mapM constructorSlot (zip [1 ..] slots))))
         constructorSlot (i,(_bang,typ)) =
@@ -388,10 +418,35 @@ nameE :: Name -> Exp
 nameE = LitE . StringL . show
 
 --------------------------------------------------------------------------------
+-- Built-in custom printers
+
+-- | Printers for built-in data types with custom representations
+-- (think: primitives, tuples, etc.)
+builtInPresenters :: [(Name,Q Exp)]
+builtInPresenters = concat [integerPrinters,charPrinters]
+  where charPrinters = map makeCharPrinter [''Char]
+          where makeCharPrinter name =
+                  (name,[|Char $(stringE (show name)) . return|])
+        integerPrinters =
+          map makeIntPrinter
+              [''Integer
+              ,''Int
+              ,''Int8
+              ,''Int16
+              ,''Int32
+              ,''Int64
+              ,''Word
+              ,''Word8
+              ,''Word32
+              ,''Word64]
+          where makeIntPrinter name =
+                  (name,[|Integer $(stringE (show name)) . show|])
+
+--------------------------------------------------------------------------------
 -- Extension classes
 
-class Present a where
-  present :: a -> Presentation
+class Present0 a where
+  present0 :: a -> Presentation
 
 class Present1 a where
   present1
@@ -434,27 +489,3 @@ class Present6 a where
            -> (z2 -> Presentation)
            -> a x y z z0 z1 z2
            -> Presentation
-
---------------------------------------------------------------------------------
--- Customized printers
-
--- Characters
-
-instance Present Char where present = Char "Char" . return
-
--- Integers
-
-instance Present Integer where present = Integer "Integer" . show
-instance Present Int where present = Integer "Int" . show
-instance Present Int16 where present = Integer "Int16" . show
-instance Present Int32 where present = Integer "Int32" . show
-instance Present Int64 where present = Integer "Int64" . show
-instance Present Int8 where present = Integer "Int8" . show
-
--- Words
-
-instance Present Word where present = Integer "Word" . show
-instance Present Word16 where present = Integer "Word16" . show
-instance Present Word32 where present = Integer "Word32" . show
-instance Present Word64 where present = Integer "Word64" . show
-instance Present Word8 where present = Integer "Word8" . show
