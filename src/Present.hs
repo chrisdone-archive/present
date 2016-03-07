@@ -25,12 +25,13 @@ module Present
   ,Present6(..))
   where
 
-import Control.Monad.State.Strict
+import Control.Monad.Trans.State.Strict
 import Data.Int
 import Data.List
 import Data.Maybe
 import Data.Word
 import Language.Haskell.TH
+import Control.Monad
 
 --------------------------------------------------------------------------------
 -- Types
@@ -166,7 +167,7 @@ data PState =
 
 -- | Reify a name.
 reifyP :: Name -> P Info
-reifyP = P . lift . reify
+reifyP = liftQ . reify
 
 -- | Declare a printer for the given type name, returning an
 -- expression referencing that printer.
@@ -288,7 +289,7 @@ makeDec name ty e =
 
 -- | Make a tuple presenter.
 makeTuplePresenter :: Type -> Int -> P Exp
-makeTuplePresenter originalType arity =
+makeTuplePresenter _originalType arity =
   declareP (mkName ("Tuple" ++ show arity))
            (mkName ("(" ++
                     intercalate
@@ -298,15 +299,15 @@ makeTuplePresenter originalType arity =
                     ")"))
            (map (PlainTV . slot_X)
                 [1 .. arity])
-           (P (lift (parensE (foldl (\inner a -> lamE [varP a] inner)
-                                    (lamE [tupP (map (varP . slot_X)
-                                                     [1 .. arity])]
-                                          [|Tuple "<TODO>"
-                                                  $(listE (map (\i ->
-                                                                  appE (varE (makePrinterI i))
-                                                                       (varE (slot_X i)))
-                                                               [1 .. arity]))|])
-                                    (reverse printers)))))
+           (liftQ (parensE (foldl (\inner a -> lamE [varP a] inner)
+                                 (lamE [tupP (map (varP . slot_X)
+                                                  [1 .. arity])]
+                                       [|Tuple "<TODO>"
+                                               $(listE (map (\i ->
+                                                               appE (varE (makePrinterI i))
+                                                                    (varE (slot_X i)))
+                                                            [1 .. arity]))|])
+                                 (reverse printers))))
   where printers = map makePrinterI [1 .. arity]
         makePrinterI = present_X . mkName . show
 
@@ -320,12 +321,12 @@ makeConPresenter originalType thisName =
            DataD _ctx typeName typeVariables constructors _names ->
              case lookup typeName builtInPresenters of
                Just presentE ->
-                 declareP typeName typeName typeVariables (P (lift presentE))
+                 declareP typeName typeName typeVariables (liftQ presentE)
                Nothing ->
                  do instances <- P (gets pInstances)
                     case lookup typeName instances of
                       Just method ->
-                        declareP typeName typeName typeVariables (P (lift (varE method)))
+                        declareP typeName typeName typeVariables (liftQ (varE method))
                       Nothing ->
                         declareP typeName typeName
                                  typeVariables
@@ -416,6 +417,13 @@ typeVariableName (KindedTV name _) = name
 -- | Make a string expression from a name.
 nameE :: Name -> Exp
 nameE = LitE . StringL . show
+
+-- | Our specific lifter.
+liftQ :: Q a -> P a
+liftQ m =
+  P (StateT (\s ->
+               do v <- m
+                  return (v,s)))
 
 --------------------------------------------------------------------------------
 -- Built-in custom printers
