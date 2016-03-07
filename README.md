@@ -5,40 +5,31 @@ I gave up on generating class instances from inside the REPL, instead
 generating code on the fly with explicit dictionary passing:
 
 ``` haskell
-λ> data X = X Char Int
-data X = X Char Int
-(0.00 secs, 510712 bytes)
-λ> :present X 'a' 123
-
-<interactive>:2650:5: Warning:
-    This binding for ‘it’ shadows the existing binding
-      defined at <interactive>:2648:1
-it :: X
-(0.00 secs, 517656 bytes)
-<interactive>:2650:1-10: Splicing expression
-    presentIt
-  ======>
-    let
-      present_Ghci3_X :: X -> Presentation
-      present_GHC_Types_Int :: Int -> Presentation
-      present_GHC_Types_Char :: Char -> Presentation
-      present_Ghci3_X
-        = \case {
-            X slot_1 slot_2
-              -> Alg
-                   "Ghci3.X"
-                   [present_GHC_Types_Char slot_1, present_GHC_Types_Int slot_2] }
-      present_GHC_Types_Int = present
-      present_GHC_Types_Char = present
-    in present_Ghci3_X it
-Alg "Ghci3.X" [Integer "Char" "a",Integer "Int" "123"]
-it :: Presentation
-(0.01 secs, 3098272 bytes)
+bash-3.2$ sh install.sh
+Configuring present-4.0.0...
+Building present-4.0.0...
+Preprocessing library present-4.0.0...
+[2 of 2] Compiling Present          ( src/Present.hs, dist/build/Present.o )
+In-place registering present-4.0.0...
+Installing library in
+/usr/local/lib/x86_64-osx-ghc-7.10.3/present-4.0.0-9q8cvmRl9VV3YGAw4tZ7Ch
+Registering present-4.0.0...
+bash-3.2$ stack exec ghci
+GHCi, version 7.10.3: http://www.haskell.org/ghc/  :? for help
+unknown option: 'c'
+package flags have changed, resetting and loading new packages...
+Prelude> data X = X Int Char
+Prelude> :present X 123 'a'
+Alg "<TODO>" "Ghci1.X" [Integer "GHC.Types.Int" "123",Char "GHC.Types.Char" "a"]
 λ>
 ```
 
 ## From GHCi
 
+Put this in your .ghci
+
 ``` haskell
-:def present \e -> return ("let it = " ++ e ++ "\n$presentIt")
+:seti -XTemplateHaskell
+:def present \e -> return ("let it = " ++ e ++ "\n$(Present.presentIt)")
+:set -package present
 ```

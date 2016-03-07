@@ -289,7 +289,7 @@ makeDec name ty e =
 
 -- | Make a tuple presenter.
 makeTuplePresenter :: Type -> Int -> P Exp
-makeTuplePresenter _originalType arity =
+makeTuplePresenter _originalType_ arity =
   declareP (mkName ("Tuple" ++ show arity))
            (mkName ("(" ++
                     intercalate
@@ -333,8 +333,7 @@ makeConPresenter originalType thisName =
                                  (makeDataD originalType typeVariables constructors)
            TySynD _name _typeVariables _ty ->
              pure (ParensE (LamE [WildP]
-                                 (AppE (ConE (mkName "Synonym"))
-                                       (LitE (StringL "type synonym")))))
+                                 (LitE (StringL "type synonym"))))
            x ->
              error ("Unsupported type declaration: " ++
                     pprint x ++ " (" ++ show x ++ ")")
@@ -368,7 +367,7 @@ makeDataD originalType typeVariables constructors =
                              (zip [1 ..] slots)))
                 matchBody =
                   (NormalB <$>
-                   (AppE (AppE (AppE (ConE (mkName "Alg"))
+                   (AppE (AppE (AppE (ConE 'Alg)
                                      (LitE (StringL "<TODO>")))
                                (nameE name)) <$>
                     (ListE <$> mapM constructorSlot (zip [1 ..] slots))))
