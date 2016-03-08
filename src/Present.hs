@@ -652,12 +652,13 @@ toShow =
       name ++
       " {" ++
       intercalate ","
-                  (map showField fields) ++ "}"
+                  (map showField fields) ++
+      "}"
       where showField (fname,slot) = fname ++ " = " ++ recur slot
     Tuple _type slots ->
       "(" ++
       intercalate ","
-                  (map recur slots) ++
+                  (map toShow slots) ++
       ")"
     List _type slots ->
       "[" ++
@@ -665,13 +666,17 @@ toShow =
                   (map recur slots) ++
       "]"
     Primitive p -> p
-  where recur p | atomic p = toShow p
-                | otherwise = "(" ++ toShow p ++ ")"
-          where atomic = \case
-                            Integer{} -> True
-                            Char{} -> True
-                            Tuple{} -> True
-                            _ -> False
+  where recur p
+          | atomic p = toShow p
+          | otherwise = "(" ++ toShow p ++ ")"
+          where atomic =
+                  \case
+                    List{} -> True
+                    Integer{} -> True
+                    Char{} -> True
+                    Tuple{} -> True
+                    Record{} -> True
+                    _ -> False
 
 -- | Pretty print the presentation.
 toPretty :: Presentation -> String
