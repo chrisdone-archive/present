@@ -1,8 +1,10 @@
 * TODO Better support for infix types
-* TODO Add type display to Alg, Rec, Tuple output
 * TODO Make lazy interface (IDs and such)
 * TODO Write test suite
-* TODO Newtypes, records
+* DONE Newtypes
+  CLOSED: [2016-03-08 Tue 18:33]
+  - State "DONE"       from "TODO"       [2016-03-08 Tue 18:33]
+* TODO Records
 * TODO Lists
 * TODO Type-aliases
 * TODO Cleanup

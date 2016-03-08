@@ -329,20 +329,11 @@ makeConPresenter originalType thisName =
        TyConI dec ->
          case dec of
            DataD _ctx typeName typeVariables constructors _names ->
-             case lookup typeName builtInPresenters of
-               Just presentE ->
-                 declareP typeName typeName typeVariables (liftQ presentE)
-               Nothing ->
-                 do instances <- P (gets pInstances)
-                    case lookup typeName instances of
-                      Just method ->
-                        declareP typeName typeName typeVariables (liftQ (varE method))
-                      Nothing ->
-                        declareP typeName typeName
-                                 typeVariables
-                                 (makeDataD originalType typeVariables typeName constructors)
+             dataType typeName typeVariables constructors
            TySynD _name _typeVariables _ty ->
              error "Type synonyms aren't supported."
+           NewtypeD _ typeName typeVariables constructor _names ->
+             dataType typeName typeVariables [constructor]
            x ->
              error ("Unsupported type declaration: " ++
                     pprint x ++ " (" ++ show x ++ ")")
@@ -351,6 +342,19 @@ makeConPresenter originalType thisName =
                              (AppE (ConE 'Primitive)
                                    (nameE name))))
        _ -> error ("Unsupported type for presenting: " ++ show thisName)
+  where dataType typeName typeVariables constructors =
+          case lookup typeName builtInPresenters of
+            Just presentE ->
+              declareP typeName typeName typeVariables (liftQ presentE)
+            Nothing ->
+              do instances <- P (gets pInstances)
+                 case lookup typeName instances of
+                   Just method ->
+                     declareP typeName typeName typeVariables (liftQ (varE method))
+                   Nothing ->
+                     declareP typeName typeName
+                              typeVariables
+                              (makeDataD originalType typeVariables typeName constructors)
 
 -- | Make a printer for a data declaration.
 makeDataD :: Type -> [TyVarBndr] -> Name -> [Con] -> P Exp
