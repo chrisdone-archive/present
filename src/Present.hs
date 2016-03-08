@@ -250,16 +250,19 @@ makePresenter originalType ty =
                               in makePresenter appliedTy appliedTy
                             _ -> regular
                  case f of
-                   ConT name ->
-                     substitute name
-                   ListT ->
-                     substitute (mkName "[]")
+                   ConT name -> substitute name
+                   ListT -> substitute (mkName "[]")
                    _ -> regular
             ConT name ->
               do makeDecls <- P (gets pMakeDecls)
-                 if makeDecls
-                    then makeConPresenter originalType name
-                    else return (VarE (present_T name))
+                 do i <- reifyP name
+                    case i of
+                      TyConI (TySynD _ _ realType) ->
+                        makePresenter realType realType
+                      _ ->
+                        if makeDecls
+                           then makeConPresenter originalType name
+                           else return (VarE (present_T name))
             ForallT _vars ctxs ambiguousType ->
               do unambiguousType <-
                    foldM (\wipType ctx ->
