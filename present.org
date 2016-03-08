@@ -1,4 +1,5 @@
 * TODO Improve support type aliases (support 'String')
+* TODO Support printing [Char] as "foo" instead of ['f','o','o']
 * TODO Fix class-based extension class
 * TODO Write test suite
 * TODO Cleanup
