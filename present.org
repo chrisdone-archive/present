@@ -1,3 +1,4 @@
+* TODO Add built-in printers for specific types like Text, ByteString, Map, etc.
 * TODO Write test suite
 * TODO Cleanup
 * TODO Make lazy interface (IDs and such)
