@@ -35,7 +35,6 @@ Add to the following to your `~/.ghci`:
 ``` haskell
 bash-3.2$ stack exec ghci
 GHCi, version 7.10.3: http://www.haskell.org/ghc/  :? for help
-unknown option: 'c'
 package flags have changed, resetting and loading new packages...
 λ> :present 1
 1
