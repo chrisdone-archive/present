@@ -1,4 +1,6 @@
+* TODO Better support for infix types
 * TODO Support including type in the presentation
+  CLOCK: [2016-03-08 Tue 15:54]--[2016-03-08 Tue 16:28] =>  0:34
 * TODO Add type display to Alg, Rec, Tuple output
 * TODO Make lazy interface (IDs and such)
 * TODO Write test suite

@@ -11,8 +11,10 @@ module Present
    presentIt
   ,presentName
   ,presentTy
-   -- * Presentation accessors
-  ,presentationType
+  -- * Presentation mediums
+  ,toShow
+  ,toPretty
+  ,toTerm
   -- * Types
   ,Presentation(..)
   -- * Customization classes
@@ -38,24 +40,17 @@ import Control.Monad
 
 -- | A presentation of a data structure.
 data Presentation
-  = Integer String String
-  | Char String String
-  | Alg String String [Presentation]
-  | Rec String String [(String,Presentation)]
-  | Tuple String [Presentation]
+  = Integer String
+  | Char String
+  | Algebraic String [Presentation]
+  | Record String [(String,Presentation)]
+  | Tuple [Presentation]
   | Primitive String
-  deriving (Show)
 
--- | Get the Haskell type of the value presented.
-presentationType :: Presentation -> String
-presentationType =
-  \case
-    Integer ty _ -> ty
-    Char ty _ -> ty
-    Alg ty _ _  -> ty
-    Rec ty _ _ -> ty
-    Tuple ty _ -> ty
-    Primitive ty -> ty
+-- | Type of an expression.
+data TypeTree =
+  TypeBranch String
+             [TypeTree]
 
 --------------------------------------------------------------------------------
 -- Top-level functions
@@ -172,13 +167,14 @@ reifyP = liftQ . reify
 -- | Declare a printer for the given type name, returning an
 -- expression referencing that printer.
 declareP :: Name -> Name -> [TyVarBndr] -> P Exp -> P Exp
-declareP name tyname (map unkind -> tyvars) func =
+declareP name tyname (map unkind -> tyvars) valueFunc =
   do st <- P get
      unless (any ((== (present_T name)) . fst3)
                  (pDecls st))
-            (do e <- func
+            (do valueBody <- valueFunc
                 P (modify (\s ->
-                             s {pDecls = ((present_T name),ty,e) : pDecls s})))
+                             s {pDecls =
+                                  ((present_T name),ty,valueBody) : pDecls s})))
      return (VarE (present_T name))
   where ty =
           ForallT (map unkind tyvars)
@@ -302,8 +298,7 @@ makeTuplePresenter _originalType_ arity =
            (liftQ (parensE (foldl (\inner a -> lamE [varP a] inner)
                                  (lamE [tupP (map (varP . slot_X)
                                                   [1 .. arity])]
-                                       [|Tuple "<TODO>"
-                                               $(listE (map (\i ->
+                                       [|Tuple $(listE (map (\i ->
                                                                appE (varE (makePrinterI i))
                                                                     (varE (slot_X i)))
                                                             [1 .. arity]))|])
@@ -332,8 +327,7 @@ makeConPresenter originalType thisName =
                                  typeVariables
                                  (makeDataD originalType typeVariables constructors)
            TySynD _name _typeVariables _ty ->
-             pure (ParensE (LamE [WildP]
-                                 (LitE (StringL "type synonym"))))
+             error "Type synonyms aren't supported."
            x ->
              error ("Unsupported type declaration: " ++
                     pprint x ++ " (" ++ show x ++ ")")
@@ -353,6 +347,7 @@ makeDataD originalType typeVariables constructors =
         constructorCase con =
           case con of
             NormalC name slots -> normalConstructor name slots
+            InfixC slot1 name slot2 -> normalConstructor name [slot1,slot2]
             _ ->
               case con of
                 NormalC _ _ -> error ("NormalC")
@@ -367,8 +362,7 @@ makeDataD originalType typeVariables constructors =
                              (zip [1 ..] slots)))
                 matchBody =
                   (NormalB <$>
-                   (AppE (AppE (AppE (ConE 'Alg)
-                                     (LitE (StringL "<TODO>")))
+                   (AppE (AppE (ConE 'Algebraic)
                                (nameE name)) <$>
                     (ListE <$> mapM constructorSlot (zip [1 ..] slots))))
         constructorSlot (i,(_bang,typ)) =
@@ -433,7 +427,7 @@ builtInPresenters :: [(Name,Q Exp)]
 builtInPresenters = concat [integerPrinters,charPrinters]
   where charPrinters = map makeCharPrinter [''Char]
           where makeCharPrinter name =
-                  (name,[|Char $(stringE (show name)) . return|])
+                  (name,[|Char . return|])
         integerPrinters =
           map makeIntPrinter
               [''Integer
@@ -447,7 +441,7 @@ builtInPresenters = concat [integerPrinters,charPrinters]
               ,''Word32
               ,''Word64]
           where makeIntPrinter name =
-                  (name,[|Integer $(stringE (show name)) . show|])
+                  (name,[|Integer . show|])
 
 --------------------------------------------------------------------------------
 -- Extension classes
@@ -496,3 +490,52 @@ class Present6 a where
            -> (z2 -> Presentation)
            -> a x y z z0 z1 z2
            -> Presentation
+
+--------------------------------------------------------------------------------
+-- Presentation mediums
+
+-- | To a familiar Show-like string.
+toShow :: Presentation -> String
+toShow =
+  \case
+    Integer i -> i
+    Char c -> "'" ++ c ++ "'"
+    Algebraic name slots ->
+      name ++
+      " " ++
+      intercalate ""
+                  (map toShow slots)
+    Record name fields ->
+      name ++
+      " " ++
+      intercalate ","
+                  (map showField fields)
+      where showField (fname,slot) = fname ++ " = " ++ toShow slot
+    Tuple slots ->
+      "(" ++
+      intercalate ","
+                  (map toShow slots) ++
+      ")"
+    Primitive p -> p
+
+-- | Pretty print the presentation.
+toPretty :: Presentation -> String
+toPretty =
+  \case
+    Integer _ -> undefined
+    Char _ -> undefined
+    Algebraic _ _ -> undefined
+    Record _ _ -> undefined
+    Tuple _ -> undefined
+    Primitive _ -> undefined
+
+-- | A terminal presentation.
+toTerm :: Presentation -> String
+toTerm =
+  \case
+    Integer _ -> undefined
+    Char _ -> undefined
+    Algebraic _ _ -> undefined
+    Record _ _ -> undefined
+    Tuple _ -> undefined
+    Primitive _ -> undefined
