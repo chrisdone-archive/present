@@ -1,12 +1,9 @@
 * TODO Better support for infix types
-* TODO Support including type in the presentation
-  CLOCK: [2016-03-08 Tue 15:54]--[2016-03-08 Tue 16:28] =>  0:34
 * TODO Add type display to Alg, Rec, Tuple output
 * TODO Make lazy interface (IDs and such)
 * TODO Write test suite
 * TODO Newtypes, records
-* TODO Lists, tuples
-  CLOCK: [2016-03-01 Tue 15:23]--[2016-03-01 Tue 16:02] =>  0:39
+* TODO Lists
 * TODO Type-aliases
 * TODO Cleanup
 * TODO Refactor the first-pass/second-pass gubbins
@@ -36,3 +33,11 @@ plain-text or terminal presentation.
   CLOSED: [2016-03-01 Tue 15:23]
   - State "DONE"       from "TODO"       [2016-03-01 Tue 15:23]
   CLOCK: [2016-03-01 Tue 15:07]--[2016-03-01 Tue 15:23] =>  0:16
+* DONE Support including type in the presentation
+  CLOSED: [2016-03-08 Tue 17:19]
+  - State "DONE"       from "TODO"       [2016-03-08 Tue 17:19]
+  CLOCK: [2016-03-08 Tue 15:54]--[2016-03-08 Tue 16:28] =>  0:34
+* DONE Tuples
+  CLOSED: [2016-03-08 Tue 17:40]
+  - State "DONE"       from "TODO"       [2016-03-08 Tue 17:40]
+  CLOCK: [2016-03-01 Tue 15:23]--[2016-03-01 Tue 16:02] =>  0:39

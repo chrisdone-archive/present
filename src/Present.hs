@@ -40,17 +40,13 @@ import Control.Monad
 
 -- | A presentation of a data structure.
 data Presentation
-  = Integer String
-  | Char String
-  | Algebraic String [Presentation]
-  | Record String [(String,Presentation)]
-  | Tuple [Presentation]
+  = Integer String String
+  | Char String String
+  | Algebraic String String [Presentation]
+  | Record String String [(String,Presentation)]
+  | Tuple String [Presentation]
   | Primitive String
-
--- | Type of an expression.
-data TypeTree =
-  TypeBranch String
-             [TypeTree]
+  deriving (Show)
 
 --------------------------------------------------------------------------------
 -- Top-level functions
@@ -118,8 +114,12 @@ presentTy name ty =
                           return e))
                  (PState [] [] [] False instances)
      ds <- mapM (\(n,t,ex) -> makeDec n t ex) decls
-     letE (map return (concat ds))
-          (appE (return func)
+     letE (valD (varP (mkName "parens"))
+                (normalB [|\x -> "(" ++ (x :: String) ++ ")"|])
+                [] :
+           map return (concat ds))
+          (appE (appE (varE 'snd)
+                      (return func))
                 (varE name))
 
 -- | Get a mapping from type to instance methods of instances of
@@ -184,7 +184,10 @@ declareP name tyname (map unkind -> tyvars) valueFunc =
                                           (ConT tyname)
                                           (map toTy tyvars)))
                          (map (presentT . toTy) tyvars))
-          where presentT t = funTy t (ConT ''Presentation)
+          where presentT t =
+                  tupleT2 (ConT ''String)
+                          (funTy t (ConT ''Presentation))
+                tupleT2 a b = AppT (AppT (TupleT 2) a) b
                 funTy x y = AppT (AppT ArrowT x) y
                 toTy t =
                   case t of
@@ -296,13 +299,25 @@ makeTuplePresenter _originalType_ arity =
            (map (PlainTV . slot_X)
                 [1 .. arity])
            (liftQ (parensE (foldl (\inner a -> lamE [varP a] inner)
-                                 (lamE [tupP (map (varP . slot_X)
-                                                  [1 .. arity])]
-                                       [|Tuple $(listE (map (\i ->
-                                                               appE (varE (makePrinterI i))
-                                                                    (varE (slot_X i)))
-                                                            [1 .. arity]))|])
-                                 (reverse printers))))
+                                  [|let typePrinter =
+                                          ("(" ++
+                                           intercalate
+                                             ","
+                                             ($(listE (map (\i ->
+                                                              appE (varE 'fst)
+                                                                   (varE i))
+                                                           printers))) ++
+                                           ")")
+                                    in (typePrinter
+                                       ,$(lamE [tupP (map (varP . slot_X)
+                                                          [1 .. arity])]
+                                               [|(Tuple typePrinter
+                                                        $(listE (map (\i ->
+                                                                        appE (appE (varE 'snd)
+                                                                                   (varE (makePrinterI i)))
+                                                                             (varE (slot_X i)))
+                                                                     [1 .. arity])))|]))|]
+                                  (reverse printers))))
   where printers = map makePrinterI [1 .. arity]
         makePrinterI = present_X . mkName . show
 
@@ -325,7 +340,7 @@ makeConPresenter originalType thisName =
                       Nothing ->
                         declareP typeName typeName
                                  typeVariables
-                                 (makeDataD originalType typeVariables constructors)
+                                 (makeDataD originalType typeVariables typeName constructors)
            TySynD _name _typeVariables _ty ->
              error "Type synonyms aren't supported."
            x ->
@@ -338,16 +353,33 @@ makeConPresenter originalType thisName =
        _ -> error ("Unsupported type for presenting: " ++ show thisName)
 
 -- | Make a printer for a data declaration.
-makeDataD :: Type -> [TyVarBndr] -> [Con] -> P Exp
-makeDataD originalType typeVariables constructors =
-  foldl wrapInArg caseOnConstructors (reverse typeVariables)
-  where wrapInArg body i =
+makeDataD :: Type -> [TyVarBndr] -> Name -> [Con] -> P Exp
+makeDataD originalType typeVariables typeName constructors =
+  foldl wrapInArg lamBody (reverse typeVariables)
+  where thisType = mkName "thisType"
+        lamBody =
+          do tyE <- typePrinter
+             lcase <- caseOnConstructors
+             return (LetE [ValD (VarP thisType)
+                                (NormalB tyE)
+                                []]
+                          (TupE [VarE thisType,lcase]))
+        typePrinter =
+          liftQ [|$(varE (mkName "parens"))
+                    (unwords ($(stringE (show typeName)) :
+                            $(listE (map (\i ->
+                                            appE (varE 'fst)
+                                                 (varE (present_X (typeVariableName i))))
+                                         typeVariables))))|]
+        wrapInArg body i =
           ParensE <$> (LamE [VarP (present_X (typeVariableName i))] <$> body)
         caseOnConstructors = LamCaseE <$> (mapM constructorCase constructors)
         constructorCase con =
           case con of
             NormalC name slots -> normalConstructor name slots
-            InfixC slot1 name slot2 -> normalConstructor name [slot1,slot2]
+            InfixC slot1 name slot2 ->
+              normalConstructor name
+                                [slot1,slot2]
             _ ->
               case con of
                 NormalC _ _ -> error ("NormalC")
@@ -362,11 +394,12 @@ makeDataD originalType typeVariables constructors =
                              (zip [1 ..] slots)))
                 matchBody =
                   (NormalB <$>
-                   (AppE (AppE (ConE 'Algebraic)
+                   (AppE (AppE (AppE (ConE 'Algebraic)
+                                     (VarE thisType))
                                (nameE name)) <$>
                     (ListE <$> mapM constructorSlot (zip [1 ..] slots))))
         constructorSlot (i,(_bang,typ)) =
-          AppE <$> express typ <*> pure (VarE (slot_X i))
+          AppE <$> fmap (AppE (VarE 'snd)) (express typ) <*> pure (VarE (slot_X i))
           where express (VarT appliedTyVar) =
                   return (VarE (present_X appliedTyVar))
                 express (AppT f x) = AppE <$> express f <*> express x
@@ -427,7 +460,7 @@ builtInPresenters :: [(Name,Q Exp)]
 builtInPresenters = concat [integerPrinters,charPrinters]
   where charPrinters = map makeCharPrinter [''Char]
           where makeCharPrinter name =
-                  (name,[|Char . return|])
+                  (name,[|("Prelude.Char",Char "Prelude.Char" . return)|])
         integerPrinters =
           map makeIntPrinter
               [''Integer
@@ -441,7 +474,7 @@ builtInPresenters = concat [integerPrinters,charPrinters]
               ,''Word32
               ,''Word64]
           where makeIntPrinter name =
-                  (name,[|Integer . show|])
+                  (name,[|($(stringE (show name)),Integer $(stringE (show name)) . show)|])
 
 --------------------------------------------------------------------------------
 -- Extension classes
@@ -498,44 +531,53 @@ class Present6 a where
 toShow :: Presentation -> String
 toShow =
   \case
-    Integer i -> i
-    Char c -> "'" ++ c ++ "'"
-    Algebraic name slots ->
+    Integer _ i -> i
+    Char _ c -> "'" ++ c ++ "'"
+    Algebraic _type name slots ->
       name ++
-      " " ++
-      intercalate ""
-                  (map toShow slots)
-    Record name fields ->
+      (if null slots
+          then ""
+          else " ") ++
+      intercalate " "
+                  (map recur slots)
+    Record _type name fields ->
       name ++
       " " ++
       intercalate ","
                   (map showField fields)
-      where showField (fname,slot) = fname ++ " = " ++ toShow slot
-    Tuple slots ->
+      where showField (fname,slot) = fname ++ " = " ++ recur slot
+    Tuple _type slots ->
       "(" ++
       intercalate ","
-                  (map toShow slots) ++
+                  (map recur slots) ++
       ")"
     Primitive p -> p
+  where recur p | atomic p = toShow p
+                | otherwise = "(" ++ toShow p ++ ")"
+          where atomic = \case
+                            Integer{} -> True
+                            Char{} -> True
+                            Tuple{} -> True
+                            _ -> False
 
 -- | Pretty print the presentation.
 toPretty :: Presentation -> String
 toPretty =
   \case
-    Integer _ -> undefined
-    Char _ -> undefined
-    Algebraic _ _ -> undefined
-    Record _ _ -> undefined
-    Tuple _ -> undefined
+    Integer _ _ -> undefined
+    Char _ _ -> undefined
+    Algebraic _ _ _ -> undefined
+    Record _ _ _ -> undefined
+    Tuple _ _ -> undefined
     Primitive _ -> undefined
 
 -- | A terminal presentation.
 toTerm :: Presentation -> String
 toTerm =
   \case
-    Integer _ -> undefined
-    Char _ -> undefined
-    Algebraic _ _ -> undefined
-    Record _ _ -> undefined
-    Tuple _ -> undefined
+    Integer _ _ -> undefined
+    Char _ _ -> undefined
+    Algebraic _ _ _ -> undefined
+    Record _ _ _ -> undefined
+    Tuple _ _ -> undefined
     Primitive _ -> undefined
