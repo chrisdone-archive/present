@@ -1,3 +1,4 @@
+* TODO Support including type in the presentation
 * TODO Add type display to Alg, Rec, Tuple output
 * TODO Make lazy interface (IDs and such)
 * TODO Write test suite
