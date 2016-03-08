@@ -1,4 +1,7 @@
-* TODO Lists
+* DONE Lists
+  CLOSED: [2016-03-08 Tue 19:36]
+  - State "DONE"       from "TODO"       [2016-03-08 Tue 19:36]
+  CLOCK: [2016-03-08 Tue 19:28]--[2016-03-08 Tue 19:36] =>  0:08
 * TODO Type-aliases
 * TODO Consider defaulting common classes like Num, IsString, etc.
 * TODO Consider supporting ambiguous vars

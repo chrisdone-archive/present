@@ -46,6 +46,7 @@ data Presentation
   | Algebraic String String [Presentation]
   | Record String String [(String,Presentation)]
   | Tuple String [Presentation]
+  | List String [Presentation]
   | Primitive String
   deriving (Show)
 
@@ -240,7 +241,8 @@ makePresenter originalType ty =
                                   else return (VarE (present_T name))
                ForallT _vars _ctx ty' ->
                  makePresenter originalType ty'
-               SigT _ _ -> error ("Unsupported type: " ++ pprint ty ++ " (SigT)")
+               TupleT arity -> makeTuplePresenter originalType arity
+               ListT -> makeListPresenter originalType
                VarT _ ->
                  help ["Cannot present this type variable"
                       ,""
@@ -262,12 +264,11 @@ makePresenter originalType ty =
                       ,"    > let it = Nothing :: Maybe ()"
                       ,"    > $presentIt"]
                PromotedT _ -> error ("Unsupported type: " ++ pprint ty ++ " (PromotedT)")
-               TupleT arity -> makeTuplePresenter originalType arity
+               SigT _ _ -> error ("Unsupported type: " ++ pprint ty ++ " (SigT)")
                UnboxedTupleT _ ->
                  error ("Unsupported type: " ++ pprint ty ++ " (UnboxedTupleT)")
                ArrowT -> error ("Unsupported type: " ++ pprint ty ++ " (ArrowT)")
                EqualityT -> error ("Unsupported type: " ++ pprint ty ++ " (EqualityT)")
-               ListT -> error ("Unsupported type: " ++ pprint ty ++ " (ListT)")
                PromotedTupleT _ ->
                  error ("Unsupported type: " ++ pprint ty ++ " (PromotedTupleT)")
                PromotedNilT ->
@@ -286,6 +287,16 @@ makeDec name ty e =
          ,ValD (VarP name)
                (NormalB e)
                []]
+
+-- | Make a presenter for lists.
+makeListPresenter :: Type -> P Exp
+makeListPresenter _originalType =
+  declareP (mkName "List")
+           (mkName "[]")
+           [PlainTV (slot_X 1)]
+           (liftQ [|\present_a ->
+                      let ty = "[" ++ fst present_a ++ "]"
+                      in (ty,\xs -> List ty (map (snd present_a) xs))|])
 
 -- | Make a tuple presenter.
 makeTuplePresenter :: Type -> Int -> P Exp
@@ -573,6 +584,11 @@ toShow =
       intercalate ","
                   (map recur slots) ++
       ")"
+    List _type slots ->
+      "[" ++
+      intercalate ","
+                  (map recur slots) ++
+      "]"
     Primitive p -> p
   where recur p | atomic p = toShow p
                 | otherwise = "(" ++ toShow p ++ ")"
@@ -592,6 +608,7 @@ toPretty =
     Record _ _ _ -> undefined
     Tuple _ _ -> undefined
     Primitive _ -> undefined
+    List _ _ -> undefined
 
 -- | A terminal presentation.
 toTerm :: Presentation -> String
@@ -603,3 +620,4 @@ toTerm =
     Record _ _ _ -> undefined
     Tuple _ _ -> undefined
     Primitive _ -> undefined
+    List _ _ -> undefined
