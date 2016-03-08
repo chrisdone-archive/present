@@ -228,57 +228,94 @@ makePresenter originalType ty =
      case lookup ty types of
        Nothing ->
          do e <- go
-            P (modify (\s -> s { pTypes = (ty,e) : pTypes s}))
+            P (modify (\s -> s {pTypes = (ty,e) : pTypes s}))
             return e
        Just e -> return e
-  where go = case ty of
-               AppT f a ->
-                 AppE <$> (makePresenter originalType f)
-                      <*> (makePresenter originalType a)
-               ConT name -> do makeDecls <- P (gets pMakeDecls)
-                               if makeDecls
-                                  then makeConPresenter originalType name
-                                  else return (VarE (present_T name))
-               ForallT _vars _ctx ty' ->
-                 makePresenter originalType ty'
-               TupleT arity -> makeTuplePresenter originalType arity
-               ListT -> makeListPresenter originalType
-               VarT _ ->
-                 help ["Cannot present this type variable"
-                      ,""
-                      ,"    " ++ pprint ty
-                      ,""
-                      ,"from the type we're trying to present: "
-                      ,""
-                      ,"    " ++ pprint originalType
-                      ,""
-                      ,"Type variables present an ambiguity: we don't know"
-                      ,"what to print for them. If your type is like this:"
-                      ,""
-                      ,"    Maybe a"
-                      ,""
-                      ,"You can try instead adding a type annotation to your"
-                      ,"expression so that there are no type variables,"
-                      ,"like this:"
-                      ,""
-                      ,"    > let it = Nothing :: Maybe ()"
-                      ,"    > $presentIt"]
-               PromotedT _ -> error ("Unsupported type: " ++ pprint ty ++ " (PromotedT)")
-               SigT _ _ -> error ("Unsupported type: " ++ pprint ty ++ " (SigT)")
-               UnboxedTupleT _ ->
-                 error ("Unsupported type: " ++ pprint ty ++ " (UnboxedTupleT)")
-               ArrowT -> error ("Unsupported type: " ++ pprint ty ++ " (ArrowT)")
-               EqualityT -> error ("Unsupported type: " ++ pprint ty ++ " (EqualityT)")
-               PromotedTupleT _ ->
-                 error ("Unsupported type: " ++ pprint ty ++ " (PromotedTupleT)")
-               PromotedNilT ->
-                 error ("Unsupported type: " ++ pprint ty ++ " (PromotedNilT)")
-               PromotedConsT ->
-                 error ("Unsupported type: " ++ pprint ty ++ " (PromotedConsT)")
-               StarT -> error ("Unsupported type: " ++ pprint ty ++ " (StarT)")
-               ConstraintT ->
-                 error ("Unsupported type: " ++ pprint ty ++ " (ConstraintT)")
-               LitT _ -> error ("Unsupported type: " ++ pprint ty ++ " (LitT)")
+  where go =
+          case ty of
+            AppT op a ->
+              do let regular =
+                       AppE <$> (makePresenter originalType op) <*>
+                       (makePresenter originalType a)
+                 let (f,args) = collapseApp ty
+                 case f of
+                   ConT name ->
+                     do fname <- reifyP name
+                        case fname of
+                          TyConI (TySynD _name vars synty) ->
+                            let appliedTy =
+                                  applyTypeFunction (zip vars args)
+                                                    synty
+                            in makePresenter appliedTy appliedTy
+                          _ -> regular
+                   _ -> regular
+            ConT name ->
+              do makeDecls <- P (gets pMakeDecls)
+                 if makeDecls
+                    then makeConPresenter originalType name
+                    else return (VarE (present_T name))
+            ForallT _vars _ctx ty' -> makePresenter originalType ty'
+            TupleT arity -> makeTuplePresenter originalType arity
+            ListT -> makeListPresenter originalType
+            VarT _ ->
+              help ["Cannot present this type variable"
+                   ,""
+                   ,"    " ++ pprint ty
+                   ,""
+                   ,"from the type we're trying to present: "
+                   ,""
+                   ,"    " ++ pprint originalType
+                   ,""
+                   ,"Type variables present an ambiguity: we don't know"
+                   ,"what to print for them. If your type is like this:"
+                   ,""
+                   ,"    Maybe a"
+                   ,""
+                   ,"You can try instead adding a type annotation to your"
+                   ,"expression so that there are no type variables,"
+                   ,"like this:"
+                   ,""
+                   ,"    > let it = Nothing :: Maybe ()"
+                   ,"    > $presentIt"]
+            PromotedT _ ->
+              error ("Unsupported type: " ++ pprint ty ++ " (PromotedT)")
+            SigT _ _ -> error ("Unsupported type: " ++ pprint ty ++ " (SigT)")
+            UnboxedTupleT _ ->
+              error ("Unsupported type: " ++ pprint ty ++ " (UnboxedTupleT)")
+            ArrowT -> error ("Unsupported type: " ++ pprint ty ++ " (ArrowT)")
+            EqualityT ->
+              error ("Unsupported type: " ++ pprint ty ++ " (EqualityT)")
+            PromotedTupleT _ ->
+              error ("Unsupported type: " ++ pprint ty ++ " (PromotedTupleT)")
+            PromotedNilT ->
+              error ("Unsupported type: " ++ pprint ty ++ " (PromotedNilT)")
+            PromotedConsT ->
+              error ("Unsupported type: " ++ pprint ty ++ " (PromotedConsT)")
+            StarT -> error ("Unsupported type: " ++ pprint ty ++ " (StarT)")
+            ConstraintT ->
+              error ("Unsupported type: " ++ pprint ty ++ " (ConstraintT)")
+            LitT _ -> error ("Unsupported type: " ++ pprint ty ++ " (LitT)")
+
+-- | Apply the given substitutions to the type.
+applyTypeFunction :: [(TyVarBndr,Type)] -> Type -> Type
+applyTypeFunction subs = go
+  where go =
+          \case
+            ForallT vars ctx ty -> ForallT vars ctx (go ty)
+            AppT f x ->
+              AppT (go f)
+                   (go x)
+            SigT ty k -> SigT (go ty) k
+            VarT a
+              | Just (_,b) <- find ((== a) . typeVariableName . fst) subs -> b
+              | otherwise -> VarT a
+            x -> x
+
+-- | Collapse a series of App (App (App f) y) z into (f,[y,z])
+collapseApp :: Type -> (Type,[Type])
+collapseApp = go []
+  where go args (AppT f x) = go (x : args) f
+        go args f          = (f,args)
 
 -- | Make a declaration given the name and type.
 makeDec :: Name -> Type -> Exp -> Q [Dec]
@@ -342,8 +379,6 @@ makeConPresenter originalType thisName =
          case dec of
            DataD _ctx typeName typeVariables constructors _names ->
              dataType typeName typeVariables constructors
-           TySynD _name _typeVariables _ty ->
-             error "Type synonyms aren't supported."
            NewtypeD _ typeName typeVariables constructor _names ->
              dataType typeName typeVariables [constructor]
            x ->
