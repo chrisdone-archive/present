@@ -11,6 +11,12 @@ Install globally into your GHC's global database with:
 $ sh install-to-global-db.sh
 ```
 
+To remove it later:
+
+```
+$ sh remove-from-global-db.sh
+```
+
 To be added: install via `stack install present`, but it needs to be
 added to an LTS/nightly version first.
 
