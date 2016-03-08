@@ -2,6 +2,7 @@ name:                present
 version:             4.0.0
 synopsis:            Make presentations for data types.
 description:         Make presentations for data types.
+homepage:            https://github.com/chrisdone/present
 license:             BSD3
 license-file:        LICENSE
 author:              Chris Done
