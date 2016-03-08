@@ -28,7 +28,7 @@ Add to the following to your `~/.ghci`:
 
 ``` haskell
 :seti -XTemplateHaskell
-:def present \e -> return ("let it = " ++ e ++ "\nputStrLn (Present.toShow $(Present.presentIt))")
+:def present \e -> return ("let it = " ++ e ++ "\nPrelude.putStrLn (Present.toShow $(Present.presentIt))")
 :set -package present
 ```
 
