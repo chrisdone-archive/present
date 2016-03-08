@@ -28,13 +28,15 @@ module Present
   ,Present6(..))
   where
 
+import Control.Monad
 import Control.Monad.Trans.State.Strict
 import Data.Int
 import Data.List
 import Data.Maybe
+import Data.String
 import Data.Word
 import Language.Haskell.TH
-import Control.Monad
+import Data.Data
 
 --------------------------------------------------------------------------------
 -- Types
@@ -238,23 +240,42 @@ makePresenter originalType ty =
                        AppE <$> (makePresenter originalType op) <*>
                        (makePresenter originalType a)
                  let (f,args) = collapseApp ty
+                     substitute name =
+                       do fname <- reifyP name
+                          case fname of
+                            TyConI (TySynD _name vars synty) ->
+                              let appliedTy =
+                                    applyTypeSubstitution (zip vars args)
+                                                          synty
+                              in makePresenter appliedTy appliedTy
+                            _ -> regular
                  case f of
                    ConT name ->
-                     do fname <- reifyP name
-                        case fname of
-                          TyConI (TySynD _name vars synty) ->
-                            let appliedTy =
-                                  applyTypeFunction (zip vars args)
-                                                    synty
-                            in makePresenter appliedTy appliedTy
-                          _ -> regular
+                     substitute name
+                   ListT ->
+                     substitute (mkName "[]")
                    _ -> regular
             ConT name ->
               do makeDecls <- P (gets pMakeDecls)
                  if makeDecls
                     then makeConPresenter originalType name
                     else return (VarE (present_T name))
-            ForallT _vars _ctx ty' -> makePresenter originalType ty'
+            ForallT _vars ctxs ambiguousType ->
+              do unambiguousType <-
+                   foldM (\wipType ctx ->
+                            case ctx of
+                              AppT (ConT className) (VarT var) ->
+                                case lookup className defaultedClasses of
+                                  Nothing -> return wipType
+                                  Just getSubstitution ->
+                                    do sub <- liftQ getSubstitution
+                                       return (applyTypeSubstitution
+                                                 [(PlainTV var,sub)]
+                                                 wipType)
+                              _ -> return wipType)
+                         ambiguousType
+                         ctxs
+                 makePresenter originalType unambiguousType
             TupleT arity -> makeTuplePresenter originalType arity
             ListT -> makeListPresenter originalType
             VarT _ ->
@@ -327,7 +348,8 @@ makeTuplePresenter _originalType_ arity =
            (map (PlainTV . slot_X)
                 [1 .. arity])
            (liftQ (parensE (foldl (\inner a -> lamE [varP a] inner)
-                                  [|let typePrinter =
+                                  [|let typePrinter :: String
+                                        typePrinter =
                                           ("(" ++
                                            intercalate
                                              ","
@@ -362,7 +384,7 @@ makeConPresenter originalType thisName =
              dataType typeName typeVariables [constructor]
            x ->
              error ("Unsupported type declaration: " ++
-                    pprint x ++ " (" ++ show x ++ ")")
+                    pprint x ++ " (" ++ show x ++ ") (" ++ show originalType ++ ")")
        PrimTyConI name _arity _unlifted ->
          liftQ ([|($(stringE (show name))
                   ,\_ -> Primitive ("<" ++ $(stringE (show name)) ++ ">"))|])
@@ -463,8 +485,8 @@ makeDataD originalType typeVariables typeName constructors =
 -- Common type manipulation operations
 
 -- | Apply the given substitutions to the type.
-applyTypeFunction :: [(TyVarBndr,Type)] -> Type -> Type
-applyTypeFunction subs = go
+applyTypeSubstitution :: [(TyVarBndr,Type)] -> Type -> Type
+applyTypeSubstitution subs = go
   where go =
           \case
             ForallT vars ctx ty -> ForallT vars ctx (go ty)
@@ -524,6 +546,21 @@ liftQ m =
 
 --------------------------------------------------------------------------------
 -- Built-in custom printers
+
+-- | Classes which when encountered in a forall context should have
+-- their corresponding type variables substituted on the right hand
+-- side with the given type.
+defaultedClasses :: [(Name,Q Type)]
+defaultedClasses =
+  [(''Integral,[t|Integer|])
+  ,(''Num,[t|Integer|])
+  ,(''Data,[t|()|])
+  ,(''Bounded,[t|()|])
+  ,(''Ord,[t|()|])
+  ,(''Eq,[t|()|])
+  ,(''Read,[t|()|])
+  ,(''Show,[t|()|])
+  ,(''IsString,[t|String|])]
 
 -- | Printers for built-in data types with custom representations
 -- (think: primitives, tuples, etc.)

@@ -1,15 +1,17 @@
-* TODO Consider defaulting common classes like Num, IsString, etc.
-* TODO Consider supporting ambiguous vars
-E.g. `Proxy :: Proxy a` or `Left 'a' :: Either Char a`. In other
-words, if it's unambiguous (none of the data slots depend on a type
-variable), might as well print it. GHCi supports this by defaulting,
-we can support it by just ignoring unused type variables.
 * TODO Fix class-based extension class
 * TODO Write test suite
 * TODO Cleanup
 * TODO Make lazy interface (IDs and such)
 * TODO Refactor the first-pass/second-pass gubbins
 * TODO Better support for infix types
+* TODO Support type equalities
+* TODO Consider supporting ambiguous vars
+  CLOSED: [2016-03-08 Tue 20:36]
+  - State "DONE"       from "TODO"       [2016-03-08 Tue 20:36]
+E.g. `Proxy :: Proxy a` or `Left 'a' :: Either Char a`. In other
+words, if it's unambiguous (none of the data slots depend on a type
+variable), might as well print it. GHCi supports this by defaulting,
+we can support it by just ignoring unused type variables.
 * DONE Remove state-monad depdency
   CLOSED: [2016-03-07 Mon 10:53]
   - State "DONE"       from "TODO"       [2016-03-07 Mon 10:53]
@@ -53,3 +55,6 @@ plain-text or terminal presentation.
   CLOSED: [2016-03-08 Tue 20:06]
   - State "DONE"       from "TODO"       [2016-03-08 Tue 20:06]
   CLOCK: [2016-03-08 Tue 19:37]--[2016-03-08 Tue 20:06] =>  0:29
+* DONE Consider defaulting common classes like Num, IsString, etc.
+  CLOSED: [2016-03-08 Tue 20:28]
+  - State "DONE"       from "TODO"       [2016-03-08 Tue 20:28]
