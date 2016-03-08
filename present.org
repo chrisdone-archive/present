@@ -1,5 +1,5 @@
 * TODO Support printing [Char] as "foo" instead of ['f','o','o']
-* TODO Fix class-based extension class
+  CLOCK: [2016-03-08 Tue 22:03]
 * TODO Write test suite
 * TODO Cleanup
 * TODO Make lazy interface (IDs and such)
@@ -62,3 +62,6 @@ plain-text or terminal presentation.
 * DONE Improve support type aliases (support 'String')
   CLOSED: [2016-03-08 Tue 21:43]
   - State "DONE"       from "TODO"       [2016-03-08 Tue 21:43]
+* DONE Fix class-based extension classes
+  CLOSED: [2016-03-08 Tue 22:02]
+  - State "DONE"       from "TODO"       [2016-03-08 Tue 22:02]

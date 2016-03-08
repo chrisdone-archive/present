@@ -387,20 +387,21 @@ makeConPresenter originalType thisName =
              dataType typeName typeVariables [constructor]
            x ->
              error ("Unsupported type declaration: " ++
-                    pprint x ++ " (" ++ show x ++ ") (" ++ show originalType ++ ")")
+                    pprint x ++
+                    " (" ++ show x ++ ") (" ++ show originalType ++ ")")
        PrimTyConI name _arity _unlifted ->
          liftQ ([|($(stringE (show name))
                   ,\_ -> Primitive ("<" ++ $(stringE (show name)) ++ ">"))|])
        _ -> error ("Unsupported type for presenting: " ++ show thisName)
   where dataType typeName typeVariables constructors =
-          case lookup typeName builtInPresenters of
-            Just presentE ->
-              declareP typeName typeName typeVariables (liftQ presentE)
-            Nothing ->
-              do instances <- P (gets pInstances)
-                 case lookup typeName instances of
-                   Just method ->
-                     declareP typeName typeName typeVariables (liftQ (varE method))
+          do instances <- P (gets pInstances)
+             case lookup typeName instances of
+               Just method ->
+                 declareP typeName typeName typeVariables (liftQ (varE method))
+               Nothing ->
+                 case lookup typeName builtInPresenters of
+                   Just presentE ->
+                     declareP typeName typeName typeVariables (liftQ presentE)
                    Nothing ->
                      declareP typeName
                               typeName
@@ -591,49 +592,53 @@ builtInPresenters = concat [integerPrinters,charPrinters]
 -- Extension classes
 
 class Present0 a where
-  present0 :: a -> Presentation
+  present0
+    :: (String,a -> Presentation)
 
 class Present1 a where
   present1
-    :: (x -> Presentation) -> a x -> Presentation
+    :: (String,x -> Presentation)
+    -> (String,a x -> Presentation)
 
 class Present2 a where
   present2
-    :: (x -> Presentation) -> (y -> Presentation) -> a x y -> Presentation
+    :: (String,x -> Presentation)
+    -> (String,y -> Presentation)
+    -> (String,a x y -> Presentation)
 
 class Present3 a where
-  present3 :: (x -> Presentation)
-           -> (y -> Presentation)
-           -> (z -> Presentation)
-           -> a x y z
-           -> Presentation
+  present3
+    :: (String,x -> Presentation)
+    -> (String,y -> Presentation)
+    -> (String,z -> Presentation)
+    -> (String,a x y z -> Presentation)
 
 class Present4 a where
-  present4 :: (x -> Presentation)
-           -> (y -> Presentation)
-           -> (z -> Presentation)
-           -> (z0 -> Presentation)
-           -> a x y z z0
-           -> Presentation
+  present4
+    :: (String,x -> Presentation)
+    -> (String,y -> Presentation)
+    -> (String,z -> Presentation)
+    -> (String,z0 -> Presentation)
+    -> (String,a x y z z0 -> Presentation)
 
 class Present5 a where
-  present5 :: (x -> Presentation)
-           -> (y -> Presentation)
-           -> (z -> Presentation)
-           -> (z0 -> Presentation)
-           -> (z1 -> Presentation)
-           -> a x y z z0 z1
-           -> Presentation
+  present5
+    :: (String,x -> Presentation)
+    -> (String,y -> Presentation)
+    -> (String,z -> Presentation)
+    -> (String,z0 -> Presentation)
+    -> (String,z1 -> Presentation)
+    -> (String,a x y z z0 z1 -> Presentation)
 
 class Present6 a where
-  present6 :: (x -> Presentation)
-           -> (y -> Presentation)
-           -> (z -> Presentation)
-           -> (z0 -> Presentation)
-           -> (z1 -> Presentation)
-           -> (z2 -> Presentation)
-           -> a x y z z0 z1 z2
-           -> Presentation
+  present6
+    :: (String,x -> Presentation)
+    -> (String,y -> Presentation)
+    -> (String,z -> Presentation)
+    -> (String,z0 -> Presentation)
+    -> (String,z1 -> Presentation)
+    -> (String,z2 -> Presentation)
+    -> (String,a x y z z0 z1 z2 -> Presentation)
 
 --------------------------------------------------------------------------------
 -- Presentation mediums
@@ -657,7 +662,7 @@ toShow =
       intercalate ","
                   (map showField fields) ++
       "}"
-      where showField (fname,slot) = fname ++ " = " ++ recur slot
+     where showField (fname,slot) = fname ++ " = " ++ recur slot
     Tuple _type slots ->
       "(" ++
       intercalate ","
@@ -669,10 +674,10 @@ toShow =
                   (map recur slots) ++
       "]"
     Primitive p -> p
-  where recur p
+ where recur p
           | atomic p = toShow p
           | otherwise = "(" ++ toShow p ++ ")"
-          where atomic =
+         where atomic =
                   \case
                     List{} -> True
                     Integer{} -> True
