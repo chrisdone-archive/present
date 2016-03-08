@@ -5,7 +5,7 @@ Make presentations for data types.
 
 ## Install
 
-Install globally into your GHC's global database with:
+Install globally into your GHC's global database (via stack) with:
 
 ```
 $ sh install-to-global-db.sh
