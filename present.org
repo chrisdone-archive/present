@@ -1,3 +1,4 @@
+* TODO Improve support type aliases (support 'String')
 * TODO Fix class-based extension class
 * TODO Write test suite
 * TODO Cleanup
