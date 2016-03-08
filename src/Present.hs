@@ -14,8 +14,6 @@ module Present
   ,presentTy
   -- * Presentation mediums
   ,toShow
-  ,toPretty
-  ,toTerm
   -- * Types
   ,Presentation(..)
   -- * Customization classes
@@ -49,6 +47,7 @@ data Presentation
   | Record String String [(String,Presentation)]
   | Tuple String [Presentation]
   | List String [Presentation]
+  | String String String
   | Primitive String
   deriving (Show)
 
@@ -336,7 +335,14 @@ makeListPresenter _originalType =
            [PlainTV (slot_X 1)]
            (liftQ [|\present_a ->
                       let ty = "[" ++ fst present_a ++ "]"
-                      in (ty,\xs -> List ty (map (snd present_a) xs))|])
+                      in (ty
+                         ,\xs ->
+                            case fst present_a of
+                              "Prelude.Char" ->
+                                String "String" (concatMap getCh (map (snd present_a) xs))
+                                where getCh (Char "Prelude.Char" ch) = ch
+                                      getCh _ = []
+                              _ -> List ty (map (snd present_a) xs))|])
 
 -- | Make a tuple presenter.
 makeTuplePresenter :: Type -> Int -> P Exp
@@ -674,6 +680,7 @@ toShow =
                   (map recur slots) ++
       "]"
     Primitive p -> p
+    String _ string -> show string
  where recur p
           | atomic p = toShow p
           | otherwise = "(" ++ toShow p ++ ")"
@@ -685,27 +692,3 @@ toShow =
                     Tuple{} -> True
                     Record{} -> True
                     _ -> False
-
--- | Pretty print the presentation.
-toPretty :: Presentation -> String
-toPretty =
-  \case
-    Integer _ _ -> undefined
-    Char _ _ -> undefined
-    Algebraic _ _ _ -> undefined
-    Record _ _ _ -> undefined
-    Tuple _ _ -> undefined
-    Primitive _ -> undefined
-    List _ _ -> undefined
-
--- | A terminal presentation.
-toTerm :: Presentation -> String
-toTerm =
-  \case
-    Integer _ _ -> undefined
-    Char _ _ -> undefined
-    Algebraic _ _ _ -> undefined
-    Record _ _ _ -> undefined
-    Tuple _ _ -> undefined
-    Primitive _ -> undefined
-    List _ _ -> undefined

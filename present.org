@@ -1,5 +1,3 @@
-* TODO Support printing [Char] as "foo" instead of ['f','o','o']
-  CLOCK: [2016-03-08 Tue 22:03]
 * TODO Write test suite
 * TODO Cleanup
 * TODO Make lazy interface (IDs and such)
@@ -65,3 +63,7 @@ plain-text or terminal presentation.
 * DONE Fix class-based extension classes
   CLOSED: [2016-03-08 Tue 22:02]
   - State "DONE"       from "TODO"       [2016-03-08 Tue 22:02]
+* DONE Support printing [Char] as "foo" instead of ['f','o','o']
+  CLOSED: [2016-03-08 Tue 22:09]
+  - State "DONE"       from "TODO"       [2016-03-08 Tue 22:09]
+  CLOCK: [2016-03-08 Tue 22:03]--[2016-03-08 Tue 22:09] =>  0:06
