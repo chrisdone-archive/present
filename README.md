@@ -5,6 +5,8 @@ Make presentations for data types.
 
 ## Install
 
+Requires: GHC 7.10.3
+
 Install globally into your GHC's global database (via stack) with:
 
 ```
