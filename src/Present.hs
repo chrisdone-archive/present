@@ -296,27 +296,6 @@ makePresenter originalType ty =
               error ("Unsupported type: " ++ pprint ty ++ " (ConstraintT)")
             LitT _ -> error ("Unsupported type: " ++ pprint ty ++ " (LitT)")
 
--- | Apply the given substitutions to the type.
-applyTypeFunction :: [(TyVarBndr,Type)] -> Type -> Type
-applyTypeFunction subs = go
-  where go =
-          \case
-            ForallT vars ctx ty -> ForallT vars ctx (go ty)
-            AppT f x ->
-              AppT (go f)
-                   (go x)
-            SigT ty k -> SigT (go ty) k
-            VarT a
-              | Just (_,b) <- find ((== a) . typeVariableName . fst) subs -> b
-              | otherwise -> VarT a
-            x -> x
-
--- | Collapse a series of App (App (App f) y) z into (f,[y,z])
-collapseApp :: Type -> (Type,[Type])
-collapseApp = go []
-  where go args (AppT f x) = go (x : args) f
-        go args f          = (f,args)
-
 -- | Make a declaration given the name and type.
 makeDec :: Name -> Type -> Exp -> Q [Dec]
 makeDec name ty e =
@@ -479,6 +458,30 @@ makeDataD originalType typeVariables typeName constructors =
                 express ty =
                   help ["Unsupported type: " ++
                         pprint ty ++ " (" ++ show ty ++ ")"]
+
+--------------------------------------------------------------------------------
+-- Common type manipulation operations
+
+-- | Apply the given substitutions to the type.
+applyTypeFunction :: [(TyVarBndr,Type)] -> Type -> Type
+applyTypeFunction subs = go
+  where go =
+          \case
+            ForallT vars ctx ty -> ForallT vars ctx (go ty)
+            AppT f x ->
+              AppT (go f)
+                   (go x)
+            SigT ty k -> SigT (go ty) k
+            VarT a
+              | Just (_,b) <- find ((== a) . typeVariableName . fst) subs -> b
+              | otherwise -> VarT a
+            x -> x
+
+-- | Collapse a series of App (App (App f) y) z into (f,[y,z])
+collapseApp :: Type -> (Type,[Type])
+collapseApp = go []
+  where go args (AppT f x) = go (x : args) f
+        go args f          = (f,args)
 
 --------------------------------------------------------------------------------
 -- Name generators
