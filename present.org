@@ -1,3 +1,25 @@
+* TODO Test out printing Data.ByteString
+Prelude> import qualified Data.ByteString.Char8 as S8
+Prelude S8> :pre S8.pack "yo"
+
+<interactive>:5:36:
+    Unsupported type: () (TupleT 0)
+
+    If you think this message was unhelpful, or that
+    there is a bug in the present library, please
+    file a bug report here:
+
+    https://github.com/chrisdone/present/issues/new
+
+    Your feedback will be very helpful to make this
+    tool as easy to use as possible.
+
+    In the splice: $Present.presentIt
+
+express ty =
+  help ["Unsupported type: " ++
+        pprint ty ++ " (" ++ show ty ++ ")"]
+
 * TODO Add built-in printers for specific types like Text, ByteString, Map, etc.
 * TODO Write test suite
 * TODO Cleanup
