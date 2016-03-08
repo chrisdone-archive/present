@@ -6,14 +6,6 @@
 --                (c) Oregon Graduate Institute of Science and Technology, 2001
 
 module Control.Monad.Trans.State.Strict (
-    -- * The State monad
-    State,
-    state,
-    runState,
-    evalState,
-    execState,
-    mapState,
-    withState,
     -- * The StateT monad transformer
     StateT(..),
     evalStateT,
@@ -28,18 +20,9 @@ module Control.Monad.Trans.State.Strict (
     gets
   ) where
 
-import Data.Functor.Identity
 import Control.Applicative
 import Control.Monad
 import Control.Monad.Fix
-
--- ---------------------------------------------------------------------------
--- | A state monad parameterized by the type @s@ of the state to carry.
---
--- The 'return' function leaves the state unchanged, while @>>=@ uses
--- the final state of the first computation as the initial state of
--- the second.
-type State s = StateT s Identity
 
 -- | Construct a state monad computation from a function.
 -- (The inverse of 'runState'.)
@@ -47,45 +30,6 @@ state :: (Monad m)
       => (s -> (a, s))  -- ^pure state transformer
       -> StateT s m a   -- ^equivalent state-passing computation
 state f = StateT (return . f)
-
--- | Unwrap a state monad computation as a function.
--- (The inverse of 'state'.)
-runState :: State s a   -- ^state-passing computation to execute
-         -> s           -- ^initial state
-         -> (a, s)      -- ^return value and final state
-runState m = runIdentity . runStateT m
-
--- | Evaluate a state computation with the given initial state
--- and return the final value, discarding the final state.
---
--- * @'evalState' m s = 'fst' ('runState' m s)@
-evalState :: State s a  -- ^state-passing computation to execute
-          -> s          -- ^initial value
-          -> a          -- ^return value of the state computation
-evalState m s = fst (runState m s)
-
--- | Evaluate a state computation with the given initial state
--- and return the final state, discarding the final value.
---
--- * @'execState' m s = 'snd' ('runState' m s)@
-execState :: State s a  -- ^state-passing computation to execute
-          -> s          -- ^initial value
-          -> s          -- ^final state
-execState m s = snd (runState m s)
-
--- | Map both the return value and final state of a computation using
--- the given function.
---
--- * @'runState' ('mapState' f m) = f . 'runState' m@
-mapState :: ((a, s) -> (b, s)) -> State s a -> State s b
-mapState f = mapStateT (Identity . f . runIdentity)
-
--- | @'withState' f m@ executes action @m@ on a state modified by
--- applying @f@.
---
--- * @'withState' f m = 'modify' f >> m@
-withState :: (s -> s) -> State s a -> State s a
-withState = withStateT
 
 -- ---------------------------------------------------------------------------
 -- | A state transformer monad parameterized by:
