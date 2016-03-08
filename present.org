@@ -1,20 +1,16 @@
-* TODO Better support for infix types
-* TODO Make lazy interface (IDs and such)
-* TODO Write test suite
-* DONE Newtypes
-  CLOSED: [2016-03-08 Tue 18:33]
-  - State "DONE"       from "TODO"       [2016-03-08 Tue 18:33]
-* TODO Records
 * TODO Lists
 * TODO Type-aliases
-* TODO Cleanup
-* TODO Refactor the first-pass/second-pass gubbins
 * TODO Consider defaulting common classes like Num, IsString, etc.
 * TODO Consider supporting ambiguous vars
 E.g. `Proxy :: Proxy a` or `Left 'a' :: Either Char a`. In other
 words, if it's unambiguous (none of the data slots depend on a type
 variable), might as well print it. GHCi supports this by defaulting,
 we can support it by just ignoring unused type variables.
+* TODO Write test suite
+* TODO Cleanup
+* TODO Make lazy interface (IDs and such)
+* TODO Refactor the first-pass/second-pass gubbins
+* TODO Better support for infix types
 * DONE Remove state-monad depdency
   CLOSED: [2016-03-07 Mon 10:53]
   - State "DONE"       from "TODO"       [2016-03-07 Mon 10:53]
@@ -43,3 +39,10 @@ plain-text or terminal presentation.
   CLOSED: [2016-03-08 Tue 17:40]
   - State "DONE"       from "TODO"       [2016-03-08 Tue 17:40]
   CLOCK: [2016-03-01 Tue 15:23]--[2016-03-01 Tue 16:02] =>  0:39
+* DONE Newtypes
+  CLOSED: [2016-03-08 Tue 18:33]
+  - State "DONE"       from "TODO"       [2016-03-08 Tue 18:33]
+* DONE Records
+  CLOSED: [2016-03-08 Tue 19:28]
+  - State "DONE"       from "TODO"       [2016-03-08 Tue 19:28]
+  CLOCK: [2016-03-08 Tue 19:19]--[2016-03-08 Tue 19:28] =>  0:09

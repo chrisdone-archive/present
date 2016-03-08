@@ -1,3 +1,4 @@
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -371,26 +372,35 @@ makeDataD originalType typeVariables typeName constructors =
         typePrinter =
           liftQ [|$(varE (mkName "parens"))
                     (unwords ($(stringE (show typeName)) :
-                            $(listE (map (\i ->
-                                            appE (varE 'fst)
-                                                 (varE (present_X (typeVariableName i))))
-                                         typeVariables))))|]
+                              $(listE (map (\i ->
+                                              appE (varE 'fst)
+                                                   (varE (present_X (typeVariableName i))))
+                                           typeVariables))))|]
         wrapInArg body i =
           ParensE <$> (LamE [VarP (present_X (typeVariableName i))] <$> body)
         caseOnConstructors = LamCaseE <$> (mapM constructorCase constructors)
         constructorCase con =
           case con of
-            NormalC name slots -> normalConstructor name slots
+            NormalC name slots ->
+              makeConstructor 'Algebraic
+                              name
+                              (map (Nothing,) slots)
             InfixC slot1 name slot2 ->
-              normalConstructor name
-                                [slot1,slot2]
+              makeConstructor 'Algebraic
+                              name
+                              [(Nothing,slot1),(Nothing,slot2)]
+            RecC name fields ->
+              makeConstructor
+                'Record
+                name
+                (map (\(fname,strict,typ) -> (Just fname,(strict,typ))) fields)
             _ ->
               case con of
                 NormalC _ _ -> error ("NormalC")
                 RecC _ _ -> error ("RecC")
                 InfixC _ _ _ -> error ("InfixC")
                 ForallC _ _ _ -> error ("ForallC")
-        normalConstructor name slots =
+        makeConstructor presentationCons name slots =
           Match constructorPattern <$> matchBody <*> pure []
           where constructorPattern =
                   (ConP name
@@ -398,13 +408,21 @@ makeDataD originalType typeVariables typeName constructors =
                              (zip [1 ..] slots)))
                 matchBody =
                   (NormalB <$>
-                   (AppE (AppE (AppE (ConE 'Algebraic)
+                   (AppE (AppE (AppE (ConE presentationCons)
                                      (VarE thisType))
                                (nameE name)) <$>
                     (ListE <$> mapM constructorSlot (zip [1 ..] slots))))
-        constructorSlot (i,(_bang,typ)) =
-          AppE <$> fmap (AppE (VarE 'snd)) (express typ) <*> pure (VarE (slot_X i))
-          where express (VarT appliedTyVar) =
+        constructorSlot (i,(mfieldName,(_bang,typ))) =
+          do presentation <- makePresentation
+             return (case mfieldName of
+                       Just name -> TupE [LitE (StringL (show (name :: Name))),presentation]
+                       Nothing -> presentation)
+          where makePresentation =
+                  AppE <$>
+                  fmap (AppE (VarE 'snd))
+                       (express typ) <*>
+                  pure (VarE (slot_X i))
+                express (VarT appliedTyVar) =
                   return (VarE (present_X appliedTyVar))
                 express (AppT f x) = AppE <$> express f <*> express x
                 express ty@ConT{} =
@@ -546,9 +564,9 @@ toShow =
                   (map recur slots)
     Record _type name fields ->
       name ++
-      " " ++
+      " {" ++
       intercalate ","
-                  (map showField fields)
+                  (map showField fields) ++ "}"
       where showField (fname,slot) = fname ++ " = " ++ recur slot
     Tuple _type slots ->
       "(" ++
