@@ -350,9 +350,8 @@ makeConPresenter originalType thisName =
              error ("Unsupported type declaration: " ++
                     pprint x ++ " (" ++ show x ++ ")")
        PrimTyConI name _arity _unlifted ->
-         pure (ParensE (LamE [WildP]
-                             (AppE (ConE 'Primitive)
-                                   (nameE name))))
+         liftQ ([|($(stringE (show name))
+                  ,\_ -> Primitive ("<" ++ $(stringE (show name)) ++ ">"))|])
        _ -> error ("Unsupported type for presenting: " ++ show thisName)
   where dataType typeName typeVariables constructors =
           case lookup typeName builtInPresenters of
@@ -364,7 +363,8 @@ makeConPresenter originalType thisName =
                    Just method ->
                      declareP typeName typeName typeVariables (liftQ (varE method))
                    Nothing ->
-                     declareP typeName typeName
+                     declareP typeName
+                              typeName
                               typeVariables
                               (makeDataD originalType typeVariables typeName constructors)
 
