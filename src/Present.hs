@@ -29,13 +29,15 @@ module Present
 
 import Control.Monad
 import Control.Monad.Trans.State.Strict
+import Data.Char
+import Data.Data
 import Data.Int
 import Data.List
 import Data.Maybe
 import Data.String
 import Data.Word
 import Language.Haskell.TH
-import Data.Data
+import Text.Printf
 
 --------------------------------------------------------------------------------
 -- Types
@@ -50,6 +52,7 @@ data Presentation
   | List String [Presentation]
   | String String String
   | Primitive String
+  | Function String
   deriving (Show)
 
 --------------------------------------------------------------------------------
@@ -170,8 +173,8 @@ reifyP = liftQ . reify
 
 -- | Declare a printer for the given type name, returning an
 -- expression referencing that printer.
-declareP :: Name -> Name -> [TyVarBndr] -> P Exp -> P Exp
-declareP name tyname (map unkind -> tyvars) valueFunc =
+declareP :: Name -> (Name,[TyVarBndr]) -> P Exp -> P Exp
+declareP name etyname valueFunc =
   do st <- P get
      unless (any ((== (present_T name)) . fst3)
                  (pDecls st))
@@ -181,13 +184,15 @@ declareP name tyname (map unkind -> tyvars) valueFunc =
                                   ((present_T name),ty,valueBody) : pDecls s})))
      return (VarE (present_T name))
   where ty =
-          ForallT (map unkind tyvars)
-                  []
-                  (foldr funTy
-                         (presentT (foldl AppT
-                                          (ConT tyname)
-                                          (map toTy tyvars)))
-                         (map (presentT . toTy) tyvars))
+          case etyname of
+            (tyname,(map unkind -> tyvars)) ->
+              ForallT (map unkind tyvars)
+                      []
+                      (foldr funTy
+                             (presentT (foldl AppT
+                                              (ConT tyname)
+                                              (map toTy tyvars)))
+                             (map (presentT . toTy) tyvars))
           where presentT t =
                   tupleT2 (ConT ''String)
                           (funTy t (ConT ''Presentation))
@@ -252,6 +257,7 @@ makePresenter originalType ty =
                  case f of
                    ConT name -> substitute name
                    ListT -> substitute (mkName "[]")
+                   ArrowT -> makeFunctionPrinter ty
                    _ -> regular
             ConT name ->
               do makeDecls <- P (gets pMakeDecls)
@@ -328,22 +334,27 @@ makeDec name ty e =
                (NormalB e)
                []]
 
+-- | Make a presenter for functions.
+makeFunctionPrinter :: Type -> P Exp
+makeFunctionPrinter originalType =
+  liftQ [|($(stringE (pprint originalType))
+          ,\_ -> Function $(stringE (pprint originalType)))|]
+
 -- | Make a presenter for lists.
 makeListPresenter :: Type -> P Exp
 makeListPresenter _originalType =
-  declareP (mkName "List")
-           (mkName "[]")
-           [PlainTV (slot_X 1)]
-           (liftQ [|\present_a ->
-                      let ty = "[" ++ fst present_a ++ "]"
-                      in (ty
-                         ,\xs ->
-                            case fst present_a of
-                              "Prelude.Char" ->
-                                String "String" (concatMap getCh (map (snd present_a) xs))
-                                where getCh (Char "Prelude.Char" ch) = ch
-                                      getCh _ = []
-                              _ -> List ty (map (snd present_a) xs))|])
+  do declareP (mkName "List")
+              (''[],[PlainTV (slot_X 1)])
+              (liftQ [|\present_a ->
+                         let ty = "[" ++ fst present_a ++ "]"
+                         in (ty
+                            ,\xs ->
+                               case fst present_a of
+                                 "Prelude.Char" ->
+                                   String "String" (concatMap getCh (map (snd present_a) xs))
+                                   where getCh (Char "Prelude.Char" ch) = ch
+                                         getCh _ = []
+                                 _ -> List ty (map (snd present_a) xs))|])
 
 -- | Make a tuple presenter.
 makeTuplePresenter :: Type -> Int -> P Exp
@@ -354,11 +365,12 @@ makeTuplePresenter _originalType_ arity =
                       ","
                       (map (const "")
                            ([1 .. arity])) ++
-                    ")"))
-           (map (PlainTV . slot_X)
-                [1 .. arity])
+                    ")")
+           ,(map (PlainTV . slot_X)
+                 [1 .. arity]))
            (liftQ (parensE (foldl (\inner a -> lamE [varP a] inner)
-                                  [|let typePrinter :: String
+                                  [|let typePrinter
+                                          :: String
                                         typePrinter =
                                           ("(" ++
                                            intercalate
@@ -396,23 +408,28 @@ makeConPresenter originalType thisName =
              error ("Unsupported type declaration: " ++
                     pprint x ++
                     " (" ++ show x ++ ") (" ++ show originalType ++ ")")
-       PrimTyConI name _arity _unlifted ->
-         liftQ ([|($(stringE (show name))
-                  ,\_ -> Primitive ("<" ++ $(stringE (show name)) ++ ">"))|])
+       PrimTyConI name arity _unlifted ->
+         liftQ (foldl (\inner next -> parensE (lamE [wildP] inner))
+                      [|($(stringE (show name))
+                        ,\_ -> Primitive ("<" ++ $(stringE (show name)) ++ ">"))|]
+                      [1..arity])
        _ -> error ("Unsupported type for presenting: " ++ show thisName)
   where dataType typeName typeVariables constructors =
           do instances <- P (gets pInstances)
              case lookup typeName instances of
                Just method ->
-                 declareP typeName typeName typeVariables (liftQ (varE method))
+                 declareP typeName
+                          (typeName,typeVariables)
+                          (liftQ (varE method))
                Nothing ->
                  case lookup typeName builtInPresenters of
                    Just presentE ->
-                     declareP typeName typeName typeVariables (liftQ presentE)
+                     declareP typeName
+                              (typeName,typeVariables)
+                              (liftQ presentE)
                    Nothing ->
                      declareP typeName
-                              typeName
-                              typeVariables
+                              (typeName,typeVariables)
                               (makeDataD originalType typeVariables typeName constructors)
 
 -- | Make a printer for a data declaration.
@@ -473,24 +490,33 @@ makeDataD originalType typeVariables typeName constructors =
         constructorSlot (i,(mfieldName,(_bang,typ))) =
           do presentation <- makePresentation
              return (case mfieldName of
-                       Just name -> TupE [LitE (StringL (show (name :: Name))),presentation]
+                       Just name ->
+                         TupE [LitE (StringL (show (name :: Name)))
+                              ,presentation]
                        Nothing -> presentation)
           where makePresentation =
-                  AppE <$>
-                  fmap (AppE (VarE 'snd))
-                       (express typ) <*>
-                  pure (VarE (slot_X i))
+                  do let (f,args) = collapseApp typ
+                     AppE <$>
+                       fmap (AppE (VarE 'snd))
+                            (case f of
+                               ArrowT -> makeFunctionPrinter typ
+                               _ -> express typ) <*>
+                       pure (VarE (slot_X i))
                 express (VarT appliedTyVar) =
                   return (VarE (present_X appliedTyVar))
                 express (AppT f x) = AppE <$> express f <*> express x
+                express (TupleT arity) = makeTuplePresenter typ arity
+                express ListT = makeListPresenter typ
                 express ty@ConT{} =
                   do P (modify (\s -> s {pTypes = pTypesCache s}))
                      e <- makePresenter originalType ty
                      P (modify (\s -> s {pTypes = []}))
                      return e
                 express ty =
-                  help ["Unsupported type: " ++
-                        pprint ty ++ " (" ++ show ty ++ ")"]
+                  help ["Unsupported type: "
+                       ,"originalType: " ++ show originalType
+                       ,"typ: " ++ show typ
+                       ,"ty: " ++ show ty]
 
 --------------------------------------------------------------------------------
 -- Common type manipulation operations
@@ -523,10 +549,11 @@ collapseApp = go []
 present_T :: Name -> Name
 present_T name = mkName ("present_" ++ concatMap normalize (show name))
   where normalize c =
-          case c of
-            '_' -> "__"
-            '.' -> "_"
-            _ -> [c]
+          if isAlphaNum c
+             then [c]
+             else if isSpace c
+                     then ""
+                     else printf "_%x" (ord c)
 
 -- | Make a variable name for presenting a constructor slot X.
 slot_X :: Int -> Name
@@ -656,6 +683,7 @@ toShow =
   \case
     Integer _ i -> i
     Char _ c -> "'" ++ c ++ "'"
+    Function ty -> "<" ++ ty ++ ">"
     Algebraic _type name slots ->
       name ++
       (if null slots
@@ -669,7 +697,7 @@ toShow =
       intercalate ","
                   (map showField fields) ++
       "}"
-     where showField (fname,slot) = fname ++ " = " ++ recur slot
+      where showField (fname,slot) = fname ++ " = " ++ recur slot
     Tuple _type slots ->
       "(" ++
       intercalate ","
@@ -682,14 +710,15 @@ toShow =
       "]"
     Primitive p -> p
     String _ string -> show string
- where recur p
+  where recur p
           | atomic p = toShow p
           | otherwise = "(" ++ toShow p ++ ")"
-         where atomic =
+          where atomic =
                   \case
                     List{} -> True
                     Integer{} -> True
                     Char{} -> True
                     Tuple{} -> True
                     Record{} -> True
+                    String{} -> True
                     _ -> False

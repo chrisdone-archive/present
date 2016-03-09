@@ -90,3 +90,12 @@ plain-text or terminal presentation.
   CLOSED: [2016-03-08 Tue 22:09]
   - State "DONE"       from "TODO"       [2016-03-08 Tue 22:09]
   CLOCK: [2016-03-08 Tue 22:03]--[2016-03-08 Tue 22:09] =>  0:06
+* DONE Printing functions
+  CLOSED: [2016-03-09 Wed 17:22]
+  - State "DONE"       from "TODO"       [2016-03-09 Wed 17:22]
+  - Note taken on [2016-03-09 Wed 16:50] \\
+    I think that we don't need to generate an actual function for this,
+    but just generate a lambda and return that. The lambda's type can
+    remain unspecified, and it returns Function "<originalType>", without
+    any further ceremony.
+  CLOCK: [2016-03-09 Wed 14:29]--[2016-03-09 Wed 14:29] =>  0:00
