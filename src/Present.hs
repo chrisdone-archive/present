@@ -44,16 +44,25 @@ import Text.Printf
 
 -- | A presentation of a data structure.
 data Presentation
-  = Integer String String
-  | Char String String
-  | Algebraic String String [Presentation]
-  | Record String String [(String,Presentation)]
-  | Tuple String [Presentation]
-  | List String [Presentation]
-  | String String String
-  | Primitive String
-  | Function String
-  deriving (Show)
+  = Integer String
+            String -- ^ Integral types.
+  | Char String
+         String -- ^ Character types.
+  | Algebraic String
+              String
+              [Presentation] -- ^ Algebraic data structures.
+  | Record String
+           String
+           [(String,Presentation)] -- ^ Record types with fields.
+  | Tuple String
+          [Presentation] -- ^ Tuples.
+  | List String
+         [Presentation] -- ^ Lists or list-like things.
+  | String String
+           String -- ^ Strings or string-like things.
+  | Primitive String -- ^ Primitive type that can't be presented.
+  | Function String -- ^ Function which cannot be presented.
+  deriving ((Show))
 
 --------------------------------------------------------------------------------
 -- Top-level functions
@@ -609,16 +618,7 @@ builtInPresenters = concat [integerPrinters,charPrinters]
                   (name,[|("Prelude.Char",Char "Prelude.Char" . return)|])
         integerPrinters =
           map makeIntPrinter
-              [''Integer
-              ,''Int
-              ,''Int8
-              ,''Int16
-              ,''Int32
-              ,''Int64
-              ,''Word
-              ,''Word8
-              ,''Word32
-              ,''Word64]
+              [''Integer ,''Int ,''Int8 ,''Int16 ,''Int32 ,''Int64 ,''Word ,''Word8 ,''Word32 ,''Word64]
           where makeIntPrinter name =
                   (name,[|($(stringE (show name)),Integer $(stringE (show name)) . show)|])
 
