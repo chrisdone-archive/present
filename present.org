@@ -1,25 +1,4 @@
-* TODO Test out printing Data.ByteString
-Prelude> import qualified Data.ByteString.Char8 as S8
-Prelude S8> :pre S8.pack "yo"
-
-<interactive>:5:36:
-    Unsupported type: () (TupleT 0)
-
-    If you think this message was unhelpful, or that
-    there is a bug in the present library, please
-    file a bug report here:
-
-    https://github.com/chrisdone/present/issues/new
-
-    Your feedback will be very helpful to make this
-    tool as easy to use as possible.
-
-    In the splice: $Present.presentIt
-
-express ty =
-  help ["Unsupported type: " ++
-        pprint ty ++ " (" ++ show ty ++ ")"]
-
+* TODO Print more primitive operations
 * TODO Add built-in printers for specific types like Text, ByteString, Map, etc.
 * TODO Write test suite
 * TODO Cleanup
@@ -99,3 +78,36 @@ plain-text or terminal presentation.
     remain unspecified, and it returns Function "<originalType>", without
     any further ceremony.
   CLOCK: [2016-03-09 Wed 14:29]--[2016-03-09 Wed 14:29] =>  0:00
+
+* DONE Test out printing Data.ByteString
+  CLOSED: [2016-03-10 Thu 20:56]
+  - State "DONE"       from "TODO"       [2016-03-10 Thu 20:56]
+  - Note taken on [2016-03-10 Thu 20:56] \\
+    Done:
+
+    Data.ByteString.Internal.PS (GHC.ForeignPtr.ForeignPtr (<GHC.Prim.Addr#>) (GHC.ForeignPtr.PlainPtr (<GHC.Prim.MutableByteArray#>))) 1 1
+Prelude> import qualified Data.ByteString.Char8 as S8
+Prelude S8> :pre S8.pack "yo"
+
+<interactive>:5:36:
+    Unsupported type: () (TupleT 0)
+
+    If you think this message was unhelpful, or that
+    there is a bug in the present library, please
+    file a bug report here:
+
+    https://github.com/chrisdone/present/issues/new
+
+    Your feedback will be very helpful to make this
+    tool as easy to use as possible.
+
+    In the splice: $Present.presentIt
+
+express ty =
+  help ["Unsupported type: " ++
+        pprint ty ++ " (" ++ show ty ++ ")"]
+
+* DONE Add choice type
+  CLOSED: [2016-03-10 Thu 21:44]
+  - State "DONE"       from "TODO"       [2016-03-10 Thu 21:44]
+  CLOCK: [2016-03-10 Thu 21:00]--[2016-03-10 Thu 21:44] =>  0:44

@@ -62,7 +62,10 @@ data Presentation
            String -- ^ Strings or string-like things.
   | Primitive String -- ^ Primitive type that can't be presented.
   | Function String -- ^ Function which cannot be presented.
-  deriving ((Show))
+  | Choice String
+           [(String,Presentation)] -- ^ Present a choice of presentation. Some
+                                   -- types have multiple valid presentations.
+  deriving (Show)
 
 --------------------------------------------------------------------------------
 -- Top-level functions
@@ -359,10 +362,16 @@ makeListPresenter _originalType =
                          in (ty
                             ,\xs ->
                                case fst present_a of
-                                 "Prelude.Char" ->
-                                   String "String" (concatMap getCh (map (snd present_a) xs))
-                                   where getCh (Char "Prelude.Char" ch) = ch
-                                         getCh _ = []
+                                 "GHC.Types.Char" ->
+                                   Choice "String"
+                                          [("String"
+                                           ,String "String"
+                                                   (concatMap getCh (map (snd present_a) xs)))
+                                          ,("List of characters"
+                                           ,List ty (map (snd present_a) xs))]
+                                   where getCh (Char "GHC.Types.Char" ch) = ch
+                                         getCh (Choice _ ((_,Char _ ch):_)) = ch
+                                         getCh _ = ""
                                  _ -> List ty (map (snd present_a) xs))|])
 
 -- | Make a tuple presenter.
@@ -418,7 +427,7 @@ makeConPresenter originalType thisName =
                     pprint x ++
                     " (" ++ show x ++ ") (" ++ show originalType ++ ")")
        PrimTyConI name arity _unlifted ->
-         liftQ (foldl (\inner next -> parensE (lamE [wildP] inner))
+         liftQ (foldl (\inner _ -> parensE (lamE [wildP] inner))
                       [|($(stringE (show name))
                         ,\_ -> Primitive ("<" ++ $(stringE (show name)) ++ ">"))|]
                       [1..arity])
@@ -504,7 +513,7 @@ makeDataD originalType typeVariables typeName constructors =
                               ,presentation]
                        Nothing -> presentation)
           where makePresentation =
-                  do let (f,args) = collapseApp typ
+                  do let (f,_) = collapseApp typ
                      AppE <$>
                        fmap (AppE (VarE 'snd))
                             (case f of
@@ -615,12 +624,41 @@ builtInPresenters :: [(Name,Q Exp)]
 builtInPresenters = concat [integerPrinters,charPrinters]
   where charPrinters = map makeCharPrinter [''Char]
           where makeCharPrinter name =
-                  (name,[|("Prelude.Char",Char "Prelude.Char" . return)|])
+                  (name
+                  ,[|($(stringE (show name))
+                     ,\c ->
+                        Choice $(stringE (show name))
+                               [("Character"
+                                ,Char $(stringE (show name))
+                                      (return c))
+                               ,("Unicode point"
+                                ,($(intPrinter name) (ord c)))])|])
         integerPrinters =
           map makeIntPrinter
-              [''Integer ,''Int ,''Int8 ,''Int16 ,''Int32 ,''Int64 ,''Word ,''Word8 ,''Word32 ,''Word64]
+              [''Integer
+              ,''Int
+              ,''Int8
+              ,''Int16
+              ,''Int32
+              ,''Int64
+              ,''Word
+              ,''Word8
+              ,''Word32
+              ,''Word64]
           where makeIntPrinter name =
-                  (name,[|($(stringE (show name)),Integer $(stringE (show name)) . show)|])
+                  (name,[|($(stringE (show name)),$(intPrinter name))|])
+        intPrinter name =
+          [|\x ->
+              Choice $(stringE (show name))
+                     [("Decimal"
+                      ,Integer $(stringE (show name))
+                               (show x))
+                     ,("Hexadecimal"
+                      ,Integer $(stringE (show name))
+                               (Text.Printf.printf "%x" x))
+                     ,("Binary"
+                      ,Integer $(stringE (show name))
+                               (Text.Printf.printf "%b" x))]|]
 
 --------------------------------------------------------------------------------
 -- Extension classes
@@ -683,7 +721,7 @@ toShow =
   \case
     Integer _ i -> i
     Char _ c -> "'" ++ c ++ "'"
-    Function ty -> "<" ++ ty ++ ">"
+    Function ty -> "<" ++ unwords (lines ty) ++ ">"
     Algebraic _type name slots ->
       name ++
       (if null slots
@@ -697,7 +735,7 @@ toShow =
       intercalate ","
                   (map showField fields) ++
       "}"
-      where showField (fname,slot) = fname ++ " = " ++ recur slot
+      where showField (fname,slot) = fname ++ " = " ++ toShow slot
     Tuple _type slots ->
       "(" ++
       intercalate ","
@@ -706,10 +744,12 @@ toShow =
     List _type slots ->
       "[" ++
       intercalate ","
-                  (map recur slots) ++
+                  (map toShow slots) ++
       "]"
     Primitive p -> p
     String _ string -> show string
+    Choice _ ((_,x):_) -> toShow x -- Pick the first choice.
+    Choice _ [] -> ""
   where recur p
           | atomic p = toShow p
           | otherwise = "(" ++ toShow p ++ ")"
