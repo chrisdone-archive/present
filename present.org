@@ -1,3 +1,8 @@
+* TODO Fix hanging data structure
+λ> data List a = Cons a (List a) | Nil
+λ> data X = X (List Int)
+λ> :pre X Nil
+<<hangs>>
 * TODO Print more primitive operations
 * TODO Add built-in printers for specific types like Text, ByteString, Map, etc.
   - Note taken on [2016-03-11 Fri 09:28] \\
