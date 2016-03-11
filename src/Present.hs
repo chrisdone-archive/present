@@ -744,43 +744,43 @@ class Present6 a where
 -- Presentation mediums
 
 -- | To a familiar Show-like string.
-toShow :: Presentation -> String
-toShow =
+toShow :: Bool -> Presentation -> String
+toShow qualified =
   \case
     Integer _ i -> i
     Char _ c -> "'" ++ c ++ "'"
     Function ty -> "<" ++ unwords (lines ty) ++ ">"
     Algebraic _type name slots ->
-      name ++
+      qualify name ++
       (if null slots
           then ""
           else " ") ++
       intercalate " "
                   (map recur slots)
     Record _type name fields ->
-      name ++
+      qualify name ++
       " {" ++
       intercalate ","
                   (map showField fields) ++
       "}"
-      where showField (fname,slot) = fname ++ " = " ++ toShow slot
+      where showField (fname,slot) = qualify fname ++ " = " ++ toShow qualified slot
     Tuple _type slots ->
       "(" ++
       intercalate ","
-                  (map toShow slots) ++
+                  (map (toShow qualified) slots) ++
       ")"
     List _type slots ->
       "[" ++
       intercalate ","
-                  (map toShow slots) ++
+                  (map (toShow qualified) slots) ++
       "]"
     Primitive p -> p
     String _ string -> show string
-    Choice _ ((_,x):_) -> toShow x -- Pick the first choice.
+    Choice _ ((_,x):_) -> toShow qualified x -- Pick the first choice.
     Choice _ [] -> ""
   where recur p
-          | atomic p = toShow p
-          | otherwise = "(" ++ toShow p ++ ")"
+          | atomic p = toShow qualified p
+          | otherwise = "(" ++ toShow qualified p ++ ")"
           where atomic =
                   \case
                     List{} -> True
@@ -792,3 +792,6 @@ toShow =
                     Choice _ ((_,x):_) -> atomic x
                     Algebraic _ _ [] -> True
                     _ -> False
+        qualify x = if qualified
+                       then x
+                       else reverse (takeWhile (/='.') (reverse x))
