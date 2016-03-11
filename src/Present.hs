@@ -38,6 +38,7 @@ import Data.String
 import Data.Word
 import Language.Haskell.TH
 import Text.Printf
+import Control.Applicative
 
 --------------------------------------------------------------------------------
 -- Types
@@ -430,7 +431,7 @@ makeConPresenter originalType thisName =
          liftQ (foldl (\inner _ -> parensE (lamE [wildP] inner))
                       [|($(stringE (show name))
                         ,\_ -> Primitive ("<" ++ $(stringE (show name)) ++ ">"))|]
-                      [1..arity])
+                      [1 .. arity])
        _ -> error ("Unsupported type for presenting: " ++ show thisName)
   where dataType typeName typeVariables constructors =
           do instances <- P (gets pInstances)
@@ -440,7 +441,8 @@ makeConPresenter originalType thisName =
                           (typeName,typeVariables)
                           (liftQ (varE method))
                Nothing ->
-                 case lookup typeName builtInPresenters of
+                 case lookup typeName builtInPresenters <|>
+                      builtInPredicates typeName of
                    Just presentE ->
                      declareP typeName
                               (typeName,typeVariables)
@@ -612,11 +614,37 @@ defaultedClasses =
   ,(''Num,[t|Integer|])
   ,(''Data,[t|()|])
   ,(''Bounded,[t|()|])
-  ,(''Ord,[t|()|])
   ,(''Eq,[t|()|])
   ,(''Read,[t|()|])
   ,(''Show,[t|()|])
   ,(''IsString,[t|String|])]
+
+-- | Some built-in printers with special predicates to match on the
+-- name.
+builtInPredicates :: Name -> Maybe (Q Exp)
+builtInPredicates name =
+  case nameModule name of
+    Just "Data.ByteString.Internal" ->
+      if nameBase name == "ByteString"
+         then Just ([| ($(stringE (show name))
+                       ,\s -> String $(stringE (show name)) (drop 1 (init (show s)))) |])
+         else Nothing
+    Just "Data.ByteString.Lazy.Internal" ->
+      if nameBase name == "ByteString"
+         then Just ([| ($(stringE (show name))
+                       ,\s -> String $(stringE (show name)) (drop 1 (init (show s)))) |])
+         else Nothing
+    Just "Data.Text.Internal" ->
+      if nameBase name == "Text"
+         then Just ([| ($(stringE (show name))
+                       ,\s -> String $(stringE (show name)) (drop 1 (init (show s)))) |])
+         else Nothing
+    Just "Data.Text.Internal.Lazy" ->
+      if nameBase name == "Text"
+         then Just ([| ($(stringE (show name))
+                       ,\s -> String $(stringE (show name)) (drop 1 (init (show s)))) |])
+         else Nothing
+    _ -> Nothing
 
 -- | Printers for built-in data types with custom representations
 -- (think: primitives, tuples, etc.)
@@ -761,4 +789,6 @@ toShow =
                     Tuple{} -> True
                     Record{} -> True
                     String{} -> True
+                    Choice _ ((_,x):_) -> atomic x
+                    Algebraic _ _ [] -> True
                     _ -> False
