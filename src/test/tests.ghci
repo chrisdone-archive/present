@@ -1,0 +1,12 @@
+:set -v0
+:set -ddump-splices
+-- This tests for recursive types not being an infinite loop.
+data List a = Cons a (List a) | Nil
+:presentDebug Nil :: List Int
+
+-- -- This tests for let generalization.
+-- :presentDebug X 0 (S 'a') :: X Int Char
+
+-- data X a b = S Char | X Int (X b a)
+-- -- This tests for ambiguous but unused types.
+-- :presentDebug X 0 (S 'a')
