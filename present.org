@@ -1,122 +1,101 @@
-* TODO Fix hanging data structure
-λ> data List a = Cons a (List a) | Nil
-λ> data X = X (List Int)
-λ> :pre X Nil
-<<hangs>>
-* TODO Print more primitive operations
 * TODO Add built-in printers for specific types like Text, ByteString, Map, etc.
-  - Note taken on [2016-03-11 Fri 09:28] \\
-    Started on this. It will be possible to use 'show' on values from
-    other libraries.
-  CLOCK: [2016-03-11 Fri 09:28]--[2016-03-11 Fri 09:29] =>  0:01
+* TODO Support infix types, record types in output
 * TODO Write test suite
-* TODO Cleanup
-* TODO Make lazy interface (IDs and such)
-* TODO Refactor the first-pass/second-pass gubbins
-* TODO Better support for infix types
-* TODO Support type equalities
-* TODO Consider supporting ambiguous vars
-  CLOSED: [2016-03-08 Tue 20:36]
-  - State "DONE"       from "TODO"       [2016-03-08 Tue 20:36]
-E.g. `Proxy :: Proxy a` or `Left 'a' :: Either Char a`. In other
-words, if it's unambiguous (none of the data slots depend on a type
-variable), might as well print it. GHCi supports this by defaulting,
-we can support it by just ignoring unused type variables.
-* DONE Remove state-monad depdency
-  CLOSED: [2016-03-07 Mon 10:53]
-  - State "DONE"       from "TODO"       [2016-03-07 Mon 10:53]
-* DONE Investigate a :present cmd in GHCi
-  CLOSED: [2016-02-27 Sat 21:07]
-  - Note taken on [2016-02-27 Sat 21:07] \\
-    Works!
-  - State "DONE"       from "TODO"       [2016-02-27 Sat 21:07]
-I think it would be a perfect solution to whether to produce e.g. a
-plain-text or terminal presentation.
-* DONE Support extension via classes
-  CLOSED: [2016-02-24 Wed 23:15]
-  - State "DONE"       from "TODO"       [2016-02-24 Wed 23:15]
-* DONE Need to add type-signatures to retain let generalization
-  CLOSED: [2016-02-24 Wed 22:35]
-  - State "DONE"       from "TODO"       [2016-02-24 Wed 22:35]
-* DONE Primitive types (Char, Int, etc.)
-  CLOSED: [2016-03-01 Tue 15:23]
-  - State "DONE"       from "TODO"       [2016-03-01 Tue 15:23]
-  CLOCK: [2016-03-01 Tue 15:07]--[2016-03-01 Tue 15:23] =>  0:16
-* DONE Support including type in the presentation
-  CLOSED: [2016-03-08 Tue 17:19]
-  - State "DONE"       from "TODO"       [2016-03-08 Tue 17:19]
-  CLOCK: [2016-03-08 Tue 15:54]--[2016-03-08 Tue 16:28] =>  0:34
-* DONE Tuples
-  CLOSED: [2016-03-08 Tue 17:40]
-  - State "DONE"       from "TODO"       [2016-03-08 Tue 17:40]
-  CLOCK: [2016-03-01 Tue 15:23]--[2016-03-01 Tue 16:02] =>  0:39
-* DONE Newtypes
-  CLOSED: [2016-03-08 Tue 18:33]
-  - State "DONE"       from "TODO"       [2016-03-08 Tue 18:33]
-* DONE Records
-  CLOSED: [2016-03-08 Tue 19:28]
-  - State "DONE"       from "TODO"       [2016-03-08 Tue 19:28]
-  CLOCK: [2016-03-08 Tue 19:19]--[2016-03-08 Tue 19:28] =>  0:09
-* DONE Lists
-  CLOSED: [2016-03-08 Tue 19:36]
-  - State "DONE"       from "TODO"       [2016-03-08 Tue 19:36]
-  CLOCK: [2016-03-08 Tue 19:28]--[2016-03-08 Tue 19:36] =>  0:08
-* DONE Type-aliases
-  CLOSED: [2016-03-08 Tue 20:06]
-  - State "DONE"       from "TODO"       [2016-03-08 Tue 20:06]
-  CLOCK: [2016-03-08 Tue 19:37]--[2016-03-08 Tue 20:06] =>  0:29
-* DONE Consider defaulting common classes like Num, IsString, etc.
-  CLOSED: [2016-03-08 Tue 20:28]
-  - State "DONE"       from "TODO"       [2016-03-08 Tue 20:28]
-* DONE Improve support type aliases (support 'String')
-  CLOSED: [2016-03-08 Tue 21:43]
-  - State "DONE"       from "TODO"       [2016-03-08 Tue 21:43]
-* DONE Fix class-based extension classes
-  CLOSED: [2016-03-08 Tue 22:02]
-  - State "DONE"       from "TODO"       [2016-03-08 Tue 22:02]
-* DONE Support printing [Char] as "foo" instead of ['f','o','o']
-  CLOSED: [2016-03-08 Tue 22:09]
-  - State "DONE"       from "TODO"       [2016-03-08 Tue 22:09]
-  CLOCK: [2016-03-08 Tue 22:03]--[2016-03-08 Tue 22:09] =>  0:06
-* DONE Printing functions
-  CLOSED: [2016-03-09 Wed 17:22]
-  - State "DONE"       from "TODO"       [2016-03-09 Wed 17:22]
-  - Note taken on [2016-03-09 Wed 16:50] \\
-    I think that we don't need to generate an actual function for this,
-    but just generate a lambda and return that. The lambda's type can
-    remain unspecified, and it returns Function "<originalType>", without
-    any further ceremony.
-  CLOCK: [2016-03-09 Wed 14:29]--[2016-03-09 Wed 14:29] =>  0:00
-
+* TODO Support extension via classes (incl. passing a default printer)
+* TODO Existentials
+* TODO Support including forall/class context in type printing
 * DONE Test out printing Data.ByteString
-  CLOSED: [2016-03-10 Thu 20:56]
-  - State "DONE"       from "TODO"       [2016-03-10 Thu 20:56]
-  - Note taken on [2016-03-10 Thu 20:56] \\
-    Done:
+  CLOSED: [2016-03-24 Thu 11:19]
+  - State "DONE"       from "TODO"       [2016-03-24 Thu 11:19]
+* DONE Rewrite from scratch
+  CLOSED: [2016-03-18 Fri 10:05]
+  - State "DONE"       from "TODO"       [2016-03-18 Fri 10:05]
+  - Note taken on [2016-03-17 Thu 12:02] \\
+    λ> putStrLn $(do ty <- [t|Either (Switch Char Int) String|]; let {Right normalType = normalizeType ty}; typeDefinitions <- normalTypeDefinitions normalType; (stringE (unlines (map (\(typeConstructor,typeDefinition) -> "-- " ++ show typeConstructor ++ "\n" ++ (pprint (typeDefinitionPrinter typeDefinition))) typeDefinitions))))
+    -- TypeConstructor Data.Either.Either
+    presentCons_Dataz2eEitherz2eEither = \presentVar_az5f1627418053 presentVar_bz5f1627418054 -> ("Data.Either.Either",
+                                                                                                  \case
+                                                                                                      Data.Either.Left indexedField_0 -> Present.DataTypePresentation "Data.Either.Left" [Data.Tuple.snd presentVar_az5f1627418053 indexedField_0]
+                                                                                                      Data.Either.Right indexedField_0 -> Present.DataTypePresentation "Data.Either.Right" [Data.Tuple.snd presentVar_bz5f1627418054 indexedField_0])
+    -- TypeConstructor Ghci3.Switch
+    presentCons_Ghci3z2eSwitch = "TODO: typeAliasPrinter"
+    -- TypeConstructor GHC.Types.Char
+    presentCons_GHCz2eTypesz2eChar = ("GHC.Types.Char",
+                                      \case
+                                          GHC.Types.C# indexedField_0 -> Present.DataTypePresentation "GHC.Types.C#" [Data.Tuple.snd presentCons_GHCz2ePrimz2eCharz23 indexedField_0])
+    -- TypeConstructor GHC.Prim.Char#
+    presentCons_GHCz2ePrimz2eCharz23 = "TODO: primitivePrinter"
+    -- TypeConstructor GHC.Types.Int
+    presentCons_GHCz2eTypesz2eInt = ("GHC.Types.Int",
+                                     \case
+                                         GHC.Types.I# indexedField_0 -> Present.DataTypePresentation "GHC.Types.I#" [Data.Tuple.snd presentCons_GHCz2ePrimz2eIntz23 indexedField_0])
+    -- TypeConstructor GHC.Prim.Int#
+    presentCons_GHCz2ePrimz2eIntz23 = "TODO: primitivePrinter"
+    -- TypeConstructor GHC.Base.String
+    presentCons_GHCz2eBasez2eString = "TODO: typeAliasPrinter"
+    -- TypeConstructor GHC.Types.[]
+    presentCons_GHCz2eTypesz2ez5bz5d = \presentVar_az5f822083586 -> ("GHC.Types.[]",
+                                                                     \case
+                                                                         GHC.Types.[] -> Present.DataTypePresentation "GHC.Types.[]" []
+                                                                         (GHC.Types.:) indexedField_0
+                                                                                       indexedField_1 -> Present.DataTypePresentation "GHC.Types.:" [Data.Tuple.snd presentVar_az5f822083586 indexedField_0,
+                                                                                                                                                     Data.Tuple.snd (presentCons_GHCz2eTypesz2ez5bz5d presentVar_az5f822083586) indexedField_1])
 
-    Data.ByteString.Internal.PS (GHC.ForeignPtr.ForeignPtr (<GHC.Prim.Addr#>) (GHC.ForeignPtr.PlainPtr (<GHC.Prim.MutableByteArray#>))) 1 1
-Prelude> import qualified Data.ByteString.Char8 as S8
-Prelude S8> :pre S8.pack "yo"
+    λ>
+  - Note taken on [2016-03-17 Thu 11:05] \\
+    Got this far:
 
-<interactive>:5:36:
-    Unsupported type: () (TupleT 0)
+    λ> putStrLn $(do ty <- [t|Either (X (Maybe Int) Integer) String|]; let {Right normalType = normalizeType ty}; typeDefinitions <- normalTypeDefinitions normalType; (stringE (unlines (map (\(typeConstructor,typeDefinition) -> show typeConstructor ++ " " ++ take 60 (show typeDefinition)) typeDefinitions))))
+    TypeConstructor Data.Either.Either DataTypeDefinition (DataType {typeVariables = [TypeVariable
+    TypeConstructor Ghci8.X DataTypeDefinition (DataType {typeVariables = [], typeConstr
+    TypeConstructor Ghci7.List DataTypeDefinition (DataType {typeVariables = [TypeVariable
+    TypeConstructor GHC.Types.Int DataTypeDefinition (DataType {typeVariables = [], typeConstr
+    TypeConstructor GHC.Prim.Int# PrimitiveDefinition (PrimitiveType {primitiveVariables = 0,
+    TypeConstructor GHC.Base.Maybe DataTypeDefinition (DataType {typeVariables = [TypeVariable
+    TypeConstructor GHC.Integer.Type.Integer DataTypeDefinition (DataType {typeVariables = [], typeConstr
+    TypeConstructor GHC.Integer.Type.BigNat DataTypeDefinition (DataType {typeVariables = [], typeConstr
+    TypeConstructor GHC.Prim.ByteArray# PrimitiveDefinition (PrimitiveType {primitiveVariables = 0,
+    TypeConstructor GHC.Base.String TypeAliasDefinition (TypeAlias {aliasVariables = [], aliasTy
+    TypeConstructor GHC.Types.[] DataTypeDefinition (DataType {typeVariables = [TypeVariable
+    TypeConstructor GHC.Types.Char DataTypeDefinition (DataType {typeVariables = [], typeConstr
+    TypeConstructor GHC.Prim.Char# PrimitiveDefinition (PrimitiveType {primitiveVariables = 0,
+  CLOCK: [2016-03-17 Thu 11:05]--[2016-03-17 Thu 11:07] =>  0:02
+* DONE Support type-variables
+  CLOSED: [2016-03-21 Mon 17:33]
+  - State "DONE"       from "TODO"       [2016-03-21 Mon 17:33]
+* DONE Support including type in the presentation
+  CLOSED: [2016-03-21 Mon 17:34]
+  - State "DONE"       from "TODO"       [2016-03-21 Mon 17:34]
+* DONE Support printing functions
+  CLOSED: [2016-03-23 Wed 17:03]
+  - State "DONE"       from "TODO"       [2016-03-23 Wed 17:03]
+* DONE Need to add type-signatures to retain let generalization
+  CLOSED: [2016-03-23 Wed 22:17]
+  - State "DONE"       from "TODO"       [2016-03-23 Wed 22:17]
+data X a b = Cons a b (X b a) | Nil
+:presentDebug Cons 'a' (1 ::Int) Nil
+* DONE Tuples
+  CLOSED: [2016-03-23 Wed 21:01]
+  - State "DONE"       from "TODO"       [2016-03-23 Wed 21:01]
+* DONE Lists
+  CLOSED: [2016-03-23 Wed 21:18]
+  - State "DONE"       from "TODO"       [2016-03-23 Wed 21:18]
 
-    If you think this message was unhelpful, or that
-    there is a bug in the present library, please
-    file a bug report here:
-
-    https://github.com/chrisdone/present/issues/new
-
-    Your feedback will be very helpful to make this
-    tool as easy to use as possible.
-
-    In the splice: $Present.presentIt
-
-express ty =
-  help ["Unsupported type: " ++
-        pprint ty ++ " (" ++ show ty ++ ")"]
-
+* DONE Print primitives (Int, Char, etc.)
+  CLOSED: [2016-03-23 Wed 22:39]
+  - State "DONE"       from "TODO"       [2016-03-23 Wed 22:39]
+* DONE Support printing lists
+  CLOSED: [2016-03-23 Wed 22:56]
+  - State "DONE"       from "TODO"       [2016-03-23 Wed 22:56]
+* DONE Support printing [Char] as "foo" instead of ['f','o','o']
+  CLOSED: [2016-03-24 Thu 11:05]
+  - State "DONE"       from "TODO"       [2016-03-24 Thu 11:05]
+* DONE Implement defaulting (Num, Show, Read)
+  CLOSED: [2016-03-24 Thu 11:18]
+  - State "DONE"       from "TODO"       [2016-03-24 Thu 11:18]
 * DONE Add choice type
-  CLOSED: [2016-03-10 Thu 21:44]
-  - State "DONE"       from "TODO"       [2016-03-10 Thu 21:44]
-  CLOCK: [2016-03-10 Thu 21:00]--[2016-03-10 Thu 21:44] =>  0:44
+  CLOSED: [2016-03-23 Wed 23:07]
+  - State "DONE"       from "TODO"       [2016-03-23 Wed 23:07]
+* DONE Write printers (text, structured-lazy)
+  CLOSED: [2016-03-24 Thu 11:27]
+  - State "DONE"       from "TODO"       [2016-03-24 Thu 11:27]
