@@ -46,6 +46,9 @@ package flags have changed, resetting and loading new packages...
 λ> :present 123
 123
 
+λ> :present (5.2,"hi",1,'a')
+(5.2,"hi",1,'a')
+
 λ> data X a = X a Int
 
 λ> :present X 5 1

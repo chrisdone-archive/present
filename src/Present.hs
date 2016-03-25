@@ -465,10 +465,10 @@ instanceBasedPresenter typeConstructor@(TypeConstructor typeConstructorName) (Va
   presentingFunctionDeclaration
     typeConstructor
     typeVariables
-    (tupE [return typeDisplayExpression
+    (tupE [typeDisplayExpression
           ,[|\x ->
                ChoicePresentation
-                 $(return typeDisplayExpression)
+                 $(typeDisplayExpression)
                  [("Instance"
                   ,snd $(foldl appE
                                (varE methodName)
@@ -484,7 +484,7 @@ dataTypePresenter typeConstructor@(TypeConstructor typeConstructorName) dataType
   presentingFunctionDeclaration
     typeConstructor
     typeVariables
-    (tupE [return typeDisplayExpression
+    (tupE [typeDisplayExpression
           ,dataTypePresenterBody typeConstructor dataType])
   where typeDisplayExpression = typeDisplay typeVariables typeConstructorName
 
@@ -495,14 +495,19 @@ dataTypePresenterBody (TypeConstructor typeConstructorName) (DataType typeVariab
   where typeDisplayExpression = typeDisplay typeVariables typeConstructorName
         constructorCase (Constructor (ValueConstructor valueConstructorName) fields) =
           match (conP valueConstructorName (map (return . fieldPattern) indexedFields))
-                (normalB (appE (appE (appE (conE (if all (isJust . fst) fields
-                                                     then 'RecordPresentation
-                                                     else 'DataTypePresentation))
-                                           (return typeDisplayExpression))
-                                     (litE (stringL (pprint valueConstructorName))))
+                (normalB (appE presentationConstructor
                                (listE (map fieldPresenter indexedFields))))
                 []
-          where indexedFields = zip (map indexedFieldName [0 ..]) fields
+          where presentationConstructor =
+                  if isTuple typeConstructorName
+                     then appE (conE 'TuplePresentation)
+                               typeDisplayExpression
+                     else appE (appE (conE (if all (isJust . fst) fields
+                                               then 'RecordPresentation
+                                               else 'DataTypePresentation))
+                                     typeDisplayExpression)
+                               (litE (stringL (pprint valueConstructorName)))
+                indexedFields = zip (map indexedFieldName [0 ..]) fields
                 fieldPattern (indexedName,_) = VarP indexedName
                 fieldPresenter (indexedName,(mvalueVariable,normalType)) =
                   addField (appE (appE (varE 'snd)
@@ -516,19 +521,33 @@ dataTypePresenterBody (TypeConstructor typeConstructorName) (DataType typeVariab
 
 -- | Generate an expression which displays a data type and its
 -- type variables as instantiated.
-typeDisplay :: Ppr a => [TypeVariable] -> a -> Exp
-typeDisplay typeVariables = applyToVars . LitE . StringL . pprint
+typeDisplay :: [TypeVariable] -> Name -> Q Exp
+typeDisplay typeVariables name = (applyToVars . litE . stringL . pprint) name
   where applyToVars typeConstructorDisplay
           | null typeVariables = typeConstructorDisplay
+          | isTuple name =
+            [|("(" ++
+               intercalate
+                 ","
+                 $(listE (map (\typeVariable ->
+                                 appE (varE 'fst)
+                                      (varE (presentVarName typeVariable)))
+                              typeVariables)) ++
+               ")")|]
           | otherwise =
-            AppE (VarE 'unwords)
-                 (InfixE (Just (ListE [typeConstructorDisplay]))
-                         (VarE '(++))
-                         (Just (ListE (map (\typeVariable ->
-                                              AppE (VarE 'parensIfNeeded)
-                                                   (AppE (VarE 'fst)
-                                                         (VarE (presentVarName typeVariable))))
+            appE (varE 'unwords)
+                 (infixE (Just (listE [typeConstructorDisplay]))
+                         (varE '(++))
+                         (Just (listE (map (\typeVariable ->
+                                              appE (varE 'parensIfNeeded)
+                                                   (appE (varE 'fst)
+                                                         (varE (presentVarName typeVariable))))
                                            typeVariables))))
+
+-- | Is a name a tuple?
+isTuple :: Name -> Bool
+isTuple typeConstructorName =
+  any ((== typeConstructorName) . snd) tupleConstructors
 
 -- | Add parens to a string if there's a space inside.
 parensIfNeeded :: [Char] -> [Char]
