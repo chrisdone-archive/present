@@ -55,7 +55,7 @@ package flags have changed, resetting and loading new packages...
 X 5 1
 
 λ> :present S88.pack "hi"
-PS (ForeignPtr GHC.Prim.Addr# (PlainPtr GHC.Prim.MutableByteArray#)) 0 2
+"hi"
 
 λ> :present print
 <a_0 -> GHC.Types.IO ()>
@@ -64,13 +64,13 @@ PS (ForeignPtr GHC.Prim.Addr# (PlainPtr GHC.Prim.MutableByteArray#)) 0 2
 IO (<GHC.Prim.State# GHC.Prim.RealWorld -> (GHC.Prim.State# GHC.Prim.RealWorld, a_0)>)
 
 λ> :present undefined
-_ :: t_0
+<_ :: t_0>
 
 λ> :present id
 <a_0 -> a_0>
 
 λ> :present [undefined]
-[_ :: t_0]
+[<_ :: t_0>]
 
 ```
 
