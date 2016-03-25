@@ -33,6 +33,7 @@ import Data.Data (Data)
 import Data.Int
 import Data.List
 import Data.Maybe
+import Data.Ratio
 import Data.String
 import Data.Typeable
 import Data.Word
@@ -216,6 +217,7 @@ defaultedClasses :: [(Name,Name)]
 defaultedClasses =
   [(''Integral,''Integer)
   ,(''Num,''Integer)
+  ,(''Fractional,''Double)
   ,(''Data,''())
   ,(''Bounded,''())
   ,(''Eq,''())
@@ -619,6 +621,7 @@ builtInPresenters :: [(TypeConstructor,[TypeVariable] -> Exp -> Q Exp)]
 builtInPresenters =
   concat [listPrinters
          ,integerPrinters
+         ,realPrinters
          ,charPrinters
          ,packedStrings
          ,vectorPrinters]
@@ -727,6 +730,18 @@ charPrinters = map makeCharPrinter [''Char]
                     ,("Unicode point",($(intPrinter Nothing name) (ord c)))
                     ,("Internal",$(return automaticPrinter) c)])|])
 
+-- | Printers for real number types.
+realPrinters :: [(TypeConstructor, a -> Exp -> Q Exp)]
+realPrinters =
+  map makeIntPrinter
+      [''Float
+      ,''Double]
+  where makeIntPrinter name =
+          (TypeConstructor name
+          ,\_ automaticPrinter ->
+             [|($(stringE (show name))
+               ,$(floatingPrinter (Just automaticPrinter)
+                                  name))|])
 -- | Printers for integral types.
 integerPrinters :: [(TypeConstructor, a -> Exp -> Q Exp)]
 integerPrinters =
@@ -747,6 +762,39 @@ integerPrinters =
              [|($(stringE (show name))
                ,$(intPrinter (Just automaticPrinter)
                              name))|])
+
+-- | Show a rational as x/y.
+showRational :: Rational -> String
+showRational x = show (numerator x) ++ "/" ++ show (denominator x)
+
+-- | Floating point printer.
+floatingPrinter :: Maybe Exp -> Name -> Q Exp
+floatingPrinter mautomaticPrinter name =
+  [|\x ->
+      ChoicePresentation
+        $(stringE (show name))
+        $(case mautomaticPrinter of
+            Nothing ->
+              [|[("Floating"
+                 ,IntegerPresentation $(stringE (show name))
+                                      (printf "%f" x))
+                ,("Show"
+                 ,IntegerPresentation $(stringE (show name))
+                                      (show x))
+                ,("Rational"
+                 ,IntegerPresentation $(stringE (show name))
+                                      (showRational (toRational x)))]|]
+            Just automaticPrinter ->
+              [|[("Floating"
+                 ,IntegerPresentation $(stringE (show name))
+                                      (printf "%f" x))
+                ,("Show"
+                 ,IntegerPresentation $(stringE (show name))
+                                      (show x))
+                ,("Rational"
+                 ,IntegerPresentation $(stringE (show name))
+                                      (showRational (toRational x)))
+                ,("Internal",$(return automaticPrinter) x)]|])|]
 
 -- | Integer printer.
 intPrinter :: Maybe Exp -> Name -> Q Exp
