@@ -266,20 +266,20 @@ newtype ValueConstructor =
 -- algorithm doesn't particularly care whether it's infix, a record,
 -- or whatever.
 data Constructor =
-  Constructor {constructorName :: ValueConstructor
+  Constructor {_constructorName :: ValueConstructor
               ,constructorFields :: [(Maybe ValueVariable,NormalType)]}
   deriving (Show,Eq,Ord)
 
 -- | A data type.
 data DataType =
-  DataType {dataTypeVariables :: [TypeVariable]
-           ,dataTypeConstructors :: [Constructor]}
+  DataType {_dataTypeVariables :: [TypeVariable]
+           ,_dataTypeConstructors :: [Constructor]}
   deriving (Show,Eq,Ord)
 
 -- | A type alias.
 data TypeAlias =
-  TypeAlias {aliasVariables :: [TypeVariable]
-            ,aliasType :: NormalType}
+  TypeAlias {_aliasVariables :: [TypeVariable]
+            ,_aliasType :: NormalType}
   deriving (Show,Eq,Ord)
 
 -- | Definition of a type.
