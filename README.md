@@ -86,3 +86,74 @@ X 5
 λ> :present X 5
 5
 ```
+
+## Detailed output
+
+``` haskell
+λ> :presentDebug (2.5,"hi",1,'a')
+TuplePresentation
+  "(GHC.Types.Double,GHC.Base.String,GHC.Integer.Type.Integer,GHC.Types.Char)"
+  [ChoicePresentation
+     "GHC.Types.Double"
+     [("Floating",IntegerPresentation "GHC.Types.Double" "2.5")
+     ,("Show",IntegerPresentation "GHC.Types.Double" "2.5")
+     ,("Rational",IntegerPresentation "GHC.Types.Double" "5/2")
+     ,("Internal"
+      ,DataTypePresentation "GHC.Types.Double"
+                            "GHC.Types.D#"
+                            [PrimitivePresentation "GHC.Prim.Double#"])]
+  ,ChoicePresentation
+     "String"
+     [("String",StringPresentation "String" "hi")
+     ,("List of characters"
+      ,ListPresentation
+         "[GHC.Types.Char]"
+         [ChoicePresentation
+            "GHC.Types.Char"
+            [("Character",CharPresentation "GHC.Types.Char" "h")
+            ,("Unicode point"
+             ,ChoicePresentation
+                "GHC.Types.Char"
+                [("Decimal",IntegerPresentation "GHC.Types.Char" "104")
+                ,("Hexadecimal",IntegerPresentation "GHC.Types.Char" "68")
+                ,("Binary",IntegerPresentation "GHC.Types.Char" "1101000")])
+            ,("Internal"
+             ,DataTypePresentation "GHC.Types.Char"
+                                   "GHC.Types.C#"
+                                   [PrimitivePresentation "GHC.Prim.Char#"])]
+         ,ChoicePresentation
+            "GHC.Types.Char"
+            [("Character",CharPresentation "GHC.Types.Char" "i")
+            ,("Unicode point"
+             ,ChoicePresentation
+                "GHC.Types.Char"
+                [("Decimal",IntegerPresentation "GHC.Types.Char" "105")
+                ,("Hexadecimal",IntegerPresentation "GHC.Types.Char" "69")
+                ,("Binary",IntegerPresentation "GHC.Types.Char" "1101001")])
+            ,("Internal"
+             ,DataTypePresentation "GHC.Types.Char"
+                                   "GHC.Types.C#"
+                                   [PrimitivePresentation "GHC.Prim.Char#"])]])]
+  ,ChoicePresentation
+     "GHC.Integer.Type.Integer"
+     [("Decimal",IntegerPresentation "GHC.Integer.Type.Integer" "1")
+     ,("Hexadecimal",IntegerPresentation "GHC.Integer.Type.Integer" "1")
+     ,("Binary",IntegerPresentation "GHC.Integer.Type.Integer" "1")
+     ,("Internal"
+      ,DataTypePresentation "GHC.Integer.Type.Integer"
+                            "GHC.Integer.Type.S#"
+                            [PrimitivePresentation "GHC.Prim.Int#"])]
+  ,ChoicePresentation
+     "GHC.Types.Char"
+     [("Character",CharPresentation "GHC.Types.Char" "a")
+     ,("Unicode point"
+      ,ChoicePresentation
+         "GHC.Types.Char"
+         [("Decimal",IntegerPresentation "GHC.Types.Char" "97")
+         ,("Hexadecimal",IntegerPresentation "GHC.Types.Char" "61")
+         ,("Binary",IntegerPresentation "GHC.Types.Char" "1100001")])
+     ,("Internal"
+      ,DataTypePresentation "GHC.Types.Char"
+                            "GHC.Types.C#"
+                            [PrimitivePresentation "GHC.Prim.Char#"])]]
+```
