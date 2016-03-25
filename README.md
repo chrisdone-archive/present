@@ -76,25 +76,10 @@ _ :: t_0
 You can write your own instances like this:
 
 ``` haskell
-instance Present0 Int where
-  present0 =
-    ("intish"
-    ,\a ->
-       IntegerPresentation "intishy"
-                           (show a ++ "!"))
-
-instance Present1 Maybe where
-  present1 =
-    \p_a -> ("probably " ++ fst p_a
-            ,\a ->
-               DataTypePresentation ("perhaps " ++ fst p_a)
-                                    "just"
-                                    [snd p_a (fromJust a)])
-```
-
-Example:
-
-``` haskell
-λ> :pre Just 5 :: Maybe Int
-just 5!
+λ> data X = X Int
+λ> :present X 5
+X 5
+λ> instance Present0 X where present0 = ("X",\(X x) -> IntegerPresentation "X" (show x))
+λ> :present X 5
+5
 ```
