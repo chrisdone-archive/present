@@ -6,7 +6,24 @@
 
 -- | Generate presentations for types.
 
-module Present where
+module Present
+  (-- * Presenting functions
+   presentIt
+  ,makePresenterFor
+  ,makeTypePresenter
+  -- * Presentation mediums
+  ,toShow
+  -- * Types
+  ,Presentation(..)
+  -- * Customization classes
+  ,Present0(..)
+  ,Present1(..)
+  ,Present2(..)
+  ,Present3(..)
+  ,Present4(..)
+  ,Present5(..)
+  ,Present6(..))
+  where
 
 import Control.Arrow
 import Control.Exception
