@@ -1,3 +1,5 @@
+* TODO Make structured type type
+* TODO Write lazy ID-based printer
 * TODO Write test suite
 * TODO Support data instances (Data.Vector.Unboxed)
 * TODO Existentials
