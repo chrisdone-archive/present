@@ -1,6 +1,5 @@
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE TupleSections #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE LambdaCase #-}
 
@@ -66,17 +65,16 @@ import qualified Language.Haskell.TH.Syntax as TH
 -- | A type variable.
 newtype TypeVariable =
   TypeVariable TH.Name
-  deriving (Show,Eq,Ord)
+  deriving (Eq)
 
 -- | A type constructor.
 newtype TypeConstructor =
   TypeConstructor TH.Name
-  deriving (Show,Eq,Ord)
+  deriving (Eq)
 
 -- | A primitive type constructor.
 newtype PrimitiveTypeConstructor =
   PrimitiveTypeConstructor TH.Name
-  deriving (Show,Eq,Ord)
 
 -- | A normalized type.
 data NormalType
@@ -86,7 +84,7 @@ data NormalType
   | NormalVar TypeVariable
   | NormalApp NormalType
               [NormalType]
-  deriving (Show,Eq,Ord)
+
 
 -- | Convert the heterogenous TH type into a more normal form.
 normalizeType
@@ -263,12 +261,10 @@ enumerateTypeConstructors = nub . go
 -- | Name of a variable.
 newtype ValueVariable =
   ValueVariable TH.Name
-  deriving (Show,Eq,Ord)
 
 -- | Name of a value constructor.
 newtype ValueConstructor =
   ValueConstructor TH.Name
-  deriving (Show,Eq,Ord)
 
 -- | A normalize representation of a constructor. Present's main
 -- algorithm doesn't particularly care whether it's infix, a record,
@@ -276,19 +272,16 @@ newtype ValueConstructor =
 data Constructor =
   Constructor {_constructorName :: ValueConstructor
               ,constructorFields :: [(Maybe ValueVariable,NormalType)]}
-  deriving (Show,Eq,Ord)
 
 -- | A data type.
 data DataType =
   DataType {_dataTypeVariables :: [TypeVariable]
            ,_dataTypeConstructors :: [Constructor]}
-  deriving (Show,Eq,Ord)
 
 -- | A type alias.
 data TypeAlias =
   TypeAlias {_aliasVariables :: [TypeVariable]
             ,_aliasType :: NormalType}
-  deriving (Show,Eq,Ord)
 
 -- | Definition of a type.
 data TypeDefinition
@@ -296,7 +289,6 @@ data TypeDefinition
                        DataType
   | TypeAliasDefinition TypeConstructor
                         TypeAlias
-  deriving (Show,Eq,Ord)
 
 -- | Reify all the constructors of a name. Unless it's primitive, in
 -- which case return nothing.
@@ -430,7 +422,6 @@ data Value
   | StringValue String String
   | TupleValue String [Value]
   | ExceptionValue String String
-  deriving (Show,Eq)
 
 -- | Make a presenter for a type definition.
 typeDefinitionPresenter :: [(TypeConstructor,ValueVariable)]

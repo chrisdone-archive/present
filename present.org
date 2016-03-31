@@ -1,4 +1,5 @@
-* TODO Include real names in the output
+* TODO Include structured Names and Types in output (protect users from TH)
+* TODO Add notion of size in output
 * TODO Add strict/unstrict fields
 * TODO Include storage requirements in the output
 * TODO Make Emacs impl.
