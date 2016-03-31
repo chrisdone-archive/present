@@ -1,9 +1,20 @@
+* TODO Include real names in the output
+* TODO Add strict/unstrict fields
+* TODO Include storage requirements in the output
+* TODO Make Emacs impl.
+* TODO Make browser-based demo
 * TODO Make structured type type
 * TODO Write lazy ID-based printer
 * TODO Write test suite
 * TODO Support data instances (Data.Vector.Unboxed)
 * TODO Existentials
 * TODO Support including forall/class context in type printing
+* DONE Import template-haskell qualified
+  CLOSED: [2016-03-31 Thu 09:50]
+  - State "DONE"       from "TODO"       [2016-03-31 Thu 09:50]
+* DONE Rename Presentation type to Value
+  CLOSED: [2016-03-31 Thu 09:50]
+  - State "DONE"       from "TODO"       [2016-03-31 Thu 09:50]
 * DONE Test out printing Data.ByteString
   CLOSED: [2016-03-24 Thu 11:19]
   - State "DONE"       from "TODO"       [2016-03-24 Thu 11:19]

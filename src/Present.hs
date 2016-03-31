@@ -14,7 +14,7 @@ module Present
   -- * Presentation mediums
   ,toShow
   -- * Types
-  ,Presentation(..)
+  ,Value(..)
   -- * Customization classes
   ,Present0(..)
   ,Present1(..)
@@ -25,22 +25,22 @@ module Present
   ,Present6(..))
   where
 
-import Control.Arrow
-import Control.Exception
-import Control.Monad.Trans.State.Strict
-import Data.Char
-import Data.Data (Data)
-import Data.Int
-import Data.List
-import Data.Maybe
-import Data.Ratio
-import Data.String
-import Data.Typeable
-import Data.Word
-import Language.Haskell.TH
-import Language.Haskell.TH.Syntax
-import System.IO.Unsafe
-import Text.Printf
+import           Control.Arrow (second)
+import           Control.Exception (evaluate,SomeException(..),try,evaluate)
+import           Control.Monad.Trans.State.Strict (evalStateT,get,modify,StateT(..))
+import           Data.Char (isSpace,ord,isAlphaNum)
+import           Data.Int (Int8,Int16,Int32,Int64)
+import           Data.List (nub,find,intercalate,foldl',isSuffixOf)
+import           Data.Maybe (mapMaybe,isJust)
+import           Data.Ratio (numerator,denominator)
+import           Data.String (IsString)
+import           Data.Typeable (typeOf)
+import           Data.Word (Word8,Word32,Word64)
+import           System.IO.Unsafe (unsafePerformIO)
+import           Text.Printf (printf)
+
+import qualified Language.Haskell.TH as TH
+import qualified Language.Haskell.TH.Syntax as TH
 
 --------------------------------------------------------------------------------
 -- Introduction
@@ -65,75 +65,76 @@ import Text.Printf
 
 -- | A type variable.
 newtype TypeVariable =
-  TypeVariable Name
+  TypeVariable TH.Name
   deriving (Show,Eq,Ord)
 
 -- | A type constructor.
 newtype TypeConstructor =
-  TypeConstructor Name
+  TypeConstructor TH.Name
   deriving (Show,Eq,Ord)
 
 -- | A primitive type constructor.
 newtype PrimitiveTypeConstructor =
-  PrimitiveTypeConstructor Name
+  PrimitiveTypeConstructor TH.Name
   deriving (Show,Eq,Ord)
 
 -- | A normalized type.
 data NormalType
   = NormalCons TypeConstructor
   | NormalPrimitive PrimitiveTypeConstructor
-  | NormalFunction Type
+  | NormalFunction TH.Type
   | NormalVar TypeVariable
   | NormalApp NormalType
               [NormalType]
   deriving (Show,Eq,Ord)
 
 -- | Convert the heterogenous TH type into a more normal form.
-normalizeType :: Type -> Either String NormalType
+normalizeType
+  :: TH.Type -> Either String NormalType
 normalizeType = go
   where go =
           \case
-            ty@AppT{} ->
+            ty@TH.AppT{} ->
               do let (typeFunction,typeArguments) = flattenApplication ty
                  case typeFunction of
-                   ArrowT -> return (NormalFunction ty)
+                   TH.ArrowT -> return (NormalFunction ty)
                    _ -> NormalApp <$> go typeFunction <*> mapM go typeArguments
-            ForallT _ context ty ->
+            TH.ForallT _ context ty ->
               if isFunction ty
                  then return (NormalFunction ty)
                  else go (typeClassDefaulting context ty)
-            SigT ty _kind -> go ty
-            VarT name -> return (NormalVar (TypeVariable name))
-            ConT name ->
+            TH.SigT ty _kind -> go ty
+            TH.VarT name -> return (NormalVar (TypeVariable name))
+            TH.ConT name ->
               return (if isPrimitiveType name
                          then NormalPrimitive (PrimitiveTypeConstructor name)
                          else NormalCons (TypeConstructor name))
-            TupleT i ->
+            TH.TupleT i ->
               case lookup i tupleConstructors of
                 Nothing -> fail ("Tuple arity " ++ show i ++ " not supported.")
                 Just cons -> return (NormalCons (TypeConstructor cons))
-            ListT -> return (NormalCons (TypeConstructor ''[]))
-            PromotedT _ -> fail "Promoted types are not supported."
-            UnboxedTupleT _ -> fail "Unboxed tuples are not supported."
-            ArrowT -> fail "The function arrow (->) is not supported."
-            EqualityT -> fail "Equalities are not supported."
-            PromotedTupleT _ -> fail "Promoted types are not supported."
-            PromotedNilT -> fail "Promoted types are not supported."
-            PromotedConsT -> fail "Promoted types are not supported."
-            StarT -> fail "Star (*) is not supported."
-            ConstraintT -> fail "Constraints are not supported."
-            LitT _ -> fail "Type-level literals are not supported."
+            TH.ListT -> return (NormalCons (TypeConstructor ''[]))
+            TH.PromotedT _ -> fail "Promoted types are not supported."
+            TH.UnboxedTupleT _ -> fail "Unboxed tuples are not supported."
+            TH.ArrowT -> fail "The function arrow (->) is not supported."
+            TH.EqualityT -> fail "Equalities are not supported."
+            TH.PromotedTupleT _ -> fail "Promoted types are not supported."
+            TH.PromotedNilT -> fail "Promoted types are not supported."
+            TH.PromotedConsT -> fail "Promoted types are not supported."
+            TH.StarT -> fail "Star (*) is not supported."
+            TH.ConstraintT -> fail "Constraints are not supported."
+            TH.LitT _ -> fail "Type-level literals are not supported."
 
 -- | Is the type a function?
-isFunction :: Type -> Bool
+isFunction :: TH.Type -> Bool
 isFunction ty =
   let (typeFunction,_) = flattenApplication ty
   in case typeFunction of
-       ArrowT -> True
+       TH.ArrowT -> True
        _ -> False
 
 -- | Arity-constructor mapping for tuples.
-tupleConstructors :: [(Int,Name)]
+tupleConstructors :: [(Int,TH.Name)]
 tupleConstructors =
   [(0,''())
   ,(2,''(,))
@@ -166,15 +167,16 @@ tupleConstructors =
 --
 -- This check may be overly cautious, but it's also about as accurate
 -- as one can seemingly be.
-isPrimitiveType :: Name -> Bool
-isPrimitiveType (Name (OccName _) (NameG TcClsName (PkgName "ghc-prim") (ModName "GHC.Prim"))) =
+isPrimitiveType :: TH.Name -> Bool
+isPrimitiveType (TH.Name (TH.OccName _) (TH.NameG TH.TcClsName (TH.PkgName "ghc-prim") (TH.ModName "GHC.Prim"))) =
   True
 isPrimitiveType name = isSuffixOf "#" (show name)
 
 -- | Flatten a type application f x y into (f,[x,y]).
-flattenApplication :: Type -> (Type,[Type])
+flattenApplication
+  :: TH.Type -> (TH.Type,[TH.Type])
 flattenApplication = go []
-  where go args (AppT f x) = go (x : args) f
+  where go args (TH.AppT f x) = go (x : args) f
         go args f = (f,args)
 
 --------------------------------------------------------------------------------
@@ -185,40 +187,44 @@ flattenApplication = go []
 
 -- | Apply defaulted substitutions for each of the constraints in the
 -- type.
-typeClassDefaulting :: [Type] -> Type -> Type
+typeClassDefaulting
+  :: [TH.Type] -> TH.Type -> TH.Type
 typeClassDefaulting constraints =
   applyTypeSubstitution
     (mapMaybe (\case
-                 AppT (ConT className) (VarT varName) ->
-                   fmap (\tyName -> (varName,ConT tyName))
+                 TH.AppT (TH.ConT className) (TH.VarT varName) ->
+                   fmap (\tyName -> (varName,TH.ConT tyName))
                         (lookup className defaultedClasses)
                  _ -> Nothing)
               constraints)
 
 -- | Apply the given substitutions to the type.
-applyTypeSubstitution :: [(Name,Type)] -> Type -> Type
+applyTypeSubstitution
+  :: [(TH.Name,TH.Type)] -> TH.Type -> TH.Type
 applyTypeSubstitution subs = go
   where go =
           \case
-            ForallT vars ctx ty -> ForallT vars ctx (go ty)
-            AppT f x ->
-              AppT (go f)
-                   (go x)
-            SigT ty k -> SigT (go ty) k
-            VarT a
+            TH.ForallT vars ctx ty ->
+              TH.ForallT vars
+                         ctx
+                         (go ty)
+            TH.AppT f x ->
+              TH.AppT (go f)
+                      (go x)
+            TH.SigT ty k -> TH.SigT (go ty) k
+            TH.VarT a
               | Just b <- lookup a subs -> b
-              | otherwise -> VarT a
+              | otherwise -> TH.VarT a
             x -> x
 
 -- | Classes which when encountered in a forall context should have
 -- their corresponding type variables substituted on the right hand
 -- side with the given type.
-defaultedClasses :: [(Name,Name)]
+defaultedClasses :: [(TH.Name,TH.Name)]
 defaultedClasses =
   [(''Integral,''Integer)
   ,(''Num,''Integer)
   ,(''Fractional,''Double)
-  ,(''Data,''())
   ,(''Bounded,''())
   ,(''Eq,''())
   ,(''Read,''())
@@ -256,12 +262,12 @@ enumerateTypeConstructors = nub . go
 
 -- | Name of a variable.
 newtype ValueVariable =
-  ValueVariable Name
+  ValueVariable TH.Name
   deriving (Show,Eq,Ord)
 
 -- | Name of a value constructor.
 newtype ValueConstructor =
-  ValueConstructor Name
+  ValueConstructor TH.Name
   deriving (Show,Eq,Ord)
 
 -- | A normalize representation of a constructor. Present's main
@@ -286,64 +292,66 @@ data TypeAlias =
 
 -- | Definition of a type.
 data TypeDefinition
-  = DataTypeDefinition TypeConstructor DataType
-  | TypeAliasDefinition TypeConstructor TypeAlias
+  = DataTypeDefinition TypeConstructor
+                       DataType
+  | TypeAliasDefinition TypeConstructor
+                        TypeAlias
   deriving (Show,Eq,Ord)
 
 -- | Reify all the constructors of a name. Unless it's primitive, in
 -- which case return nothing.
 reifyTypeDefinition
-  :: TypeConstructor -> Q (Maybe TypeDefinition)
+  :: TypeConstructor -> TH.Q (Maybe TypeDefinition)
 reifyTypeDefinition typeConstructor@(TypeConstructor name) =
-  do info <- reify name
+  do info <- TH.reify name
      let result =
            case info of
-             TyConI dec ->
+             TH.TyConI dec ->
                case dec of
-                 DataD _cxt _ vars cons _deriving ->
+                 TH.DataD _cxt _ vars cons _deriving ->
                    do cs <- mapM makeConstructor cons
                       return (Just (DataTypeDefinition typeConstructor
                                                        (DataType (map toTypeVariable vars) cs)))
-                 NewtypeD _cxt _ vars con _deriving ->
+                 TH.NewtypeD _cxt _ vars con _deriving ->
                    do c <- makeConstructor con
                       return (Just (DataTypeDefinition
                                       typeConstructor
                                       (DataType (map toTypeVariable vars)
                                                 [c])))
-                 TySynD _ vars ty ->
+                 TH.TySynD _ vars ty ->
                    do ty' <- normalizeType ty
                       return (Just (TypeAliasDefinition typeConstructor
                                                         (TypeAlias (map toTypeVariable vars) ty')))
                  _ -> fail "Not a supported data type declaration."
-             PrimTyConI{} -> return Nothing
-             FamilyI{} -> fail "Data families not supported yet."
+             TH.PrimTyConI{} -> return Nothing
+             TH.FamilyI{} -> fail "Data families not supported yet."
              _ ->
                fail ("Not a supported object, no type inside it: " ++
-                     pprint info)
+                     TH.pprint info)
      case result of
        Left err -> fail err
        Right ok -> return ok
 
 -- | Convert a TH type variable to a normalized type variable.
-toTypeVariable :: TyVarBndr -> TypeVariable
+toTypeVariable :: TH.TyVarBndr -> TypeVariable
 toTypeVariable =
   \case
-    PlainTV t -> TypeVariable t
-    KindedTV t _ -> TypeVariable t
+    TH.PlainTV t -> TypeVariable t
+    TH.KindedTV t _ -> TypeVariable t
 
 -- | Make a normalized constructor from the more complex TH Con.
 makeConstructor
-  :: Con -> Either String Constructor
+  :: TH.Con -> Either String Constructor
 makeConstructor =
   \case
-    NormalC name slots ->
+    TH.NormalC name slots ->
       Constructor <$> pure (ValueConstructor name) <*> mapM makeSlot slots
-    RecC name fields ->
+    TH.RecC name fields ->
       Constructor <$> pure (ValueConstructor name) <*> mapM makeField fields
-    InfixC t1 name t2 ->
+    TH.InfixC t1 name t2 ->
       Constructor <$> pure (ValueConstructor name) <*>
       ((\x y -> [x,y]) <$> makeSlot t1 <*> makeSlot t2)
-    ForallC _ _ _ -> fail "Existentials aren't supported."
+    TH.ForallC _ _ _ -> fail "Existentials aren't supported."
   where makeSlot (_,ty) = (Nothing,) <$> normalizeType ty
         makeField (name,_,ty) =
           (Just (ValueVariable name),) <$> normalizeType ty
@@ -377,7 +385,7 @@ definitionNormalTypes =
 -- | Expand a type into all the type definitions directly or
 -- indirectly related.
 normalTypeDefinitions
-  :: NormalType -> Q [TypeDefinition]
+  :: NormalType -> TH.Q [TypeDefinition]
 normalTypeDefinitions = flip evalStateT [] . expandNormalType
   where expandNormalType =
           fmap concat . mapM expandTypeConstructor . enumerateTypeConstructors
@@ -398,7 +406,7 @@ normalTypeDefinitions = flip evalStateT [] . expandNormalType
                                return (typeDefinition : typeDefinitions)
 
 -- | Lift a Q monad into a StateT transformer.
-liftQ :: Q a -> StateT s Q a
+liftQ :: TH.Q a -> StateT s TH.Q a
 liftQ m =
   StateT (\s ->
             do v <- m
@@ -409,34 +417,25 @@ liftQ m =
 --
 -- Given a TypeDefinition, generate a printer for that data type.
 
-data Presentation
-  = DataTypePresentation String
-                         String
-                         [Presentation]
-  | TypeVariablePresentation String
-  | PrimitivePresentation String
-  | FunctionPresentation String
-  | CharPresentation String
-                     String
-  | IntegerPresentation String
-                        String
-  | ChoicePresentation String
-                       [(String,Presentation)]
-  | RecordPresentation String
-                       String
-                       [(String,Presentation)]
-  | ListPresentation String
-                     [Presentation]
-  | StringPresentation String
-                       String
-  | TuplePresentation String
-                      [Presentation]
-  | ExceptionPresentation String
-                          String
+data Value
+  = DataValue String String [Value]
+  | TypeVariableValue String
+  | PrimitiveValue String
+  | FunctionValue String
+  | CharValue String String
+  | IntegerValue String String
+  | ChoiceValue String [(String,Value)]
+  | RecordValue String String [(String,Value)]
+  | ListValue String [Value]
+  | StringValue String String
+  | TupleValue String [Value]
+  | ExceptionValue String String
   deriving (Show,Eq)
 
 -- | Make a presenter for a type definition.
-typeDefinitionPresenter :: [(TypeConstructor,ValueVariable)] -> TypeDefinition -> Q [Dec]
+typeDefinitionPresenter :: [(TypeConstructor,ValueVariable)]
+                        -> TypeDefinition
+                        -> TH.Q [TH.Dec]
 typeDefinitionPresenter instances =
   \case
     DataTypeDefinition typeConstructor dataType@(DataType typeVariables _) ->
@@ -450,8 +449,7 @@ typeDefinitionPresenter instances =
                  builtinFunctionDeclaration typeConstructor
                                             (presenter typeVariables automaticPresenter)
         Just (_,methodName) ->
-          do
-             instanceBasedPresenter typeConstructor methodName dataType typeVariables
+          do instanceBasedPresenter typeConstructor methodName dataType typeVariables
     TypeAliasDefinition typeConstructor typeAlias ->
       typeAliasPresenter typeConstructor typeAlias
 
@@ -460,92 +458,96 @@ instanceBasedPresenter :: TypeConstructor
                        -> ValueVariable
                        -> DataType
                        -> [TypeVariable]
-                       -> Q [Dec]
+                       -> TH.Q [TH.Dec]
 instanceBasedPresenter typeConstructor@(TypeConstructor typeConstructorName) (ValueVariable methodName) dataType typeVariables =
   presentingFunctionDeclaration
     typeConstructor
     typeVariables
-    (tupE [typeDisplayExpression
-          ,[|\x ->
-               ChoicePresentation
-                 $(typeDisplayExpression)
-                 [("Instance"
-                  ,snd $(foldl appE
-                               (varE methodName)
-                               (map (varE . presentVarName) typeVariables))
-                       x)
-                 ,("Internal"
-                  ,$(dataTypePresenterBody typeConstructor dataType) x)]|]])
+    (TH.tupE [typeDisplayExpression
+             ,[|\x ->
+                  ChoiceValue
+                    $(typeDisplayExpression)
+                    [("Instance"
+                     ,snd $(foldl TH.appE
+                                  (TH.varE methodName)
+                                  (map (TH.varE . presentVarName) typeVariables))
+                          x)
+                    ,("Internal"
+                     ,$(dataTypePresenterBody typeConstructor dataType) x)]|]])
   where typeDisplayExpression = typeDisplay typeVariables typeConstructorName
 
 -- | Make a presenter for the given data type.
-dataTypePresenter :: TypeConstructor -> DataType -> Q [Dec]
+dataTypePresenter
+  :: TypeConstructor -> DataType -> TH.Q [TH.Dec]
 dataTypePresenter typeConstructor@(TypeConstructor typeConstructorName) dataType@(DataType typeVariables _) =
   presentingFunctionDeclaration
     typeConstructor
     typeVariables
-    (tupE [typeDisplayExpression
-          ,dataTypePresenterBody typeConstructor dataType])
+    (TH.tupE [typeDisplayExpression
+             ,dataTypePresenterBody typeConstructor dataType])
   where typeDisplayExpression = typeDisplay typeVariables typeConstructorName
 
 -- | Make a printer for a data type, just the expression part.
-dataTypePresenterBody :: TypeConstructor -> DataType -> Q Exp
+dataTypePresenterBody
+  :: TypeConstructor -> DataType -> TH.Q TH.Exp
 dataTypePresenterBody (TypeConstructor typeConstructorName) (DataType typeVariables constructors) =
-  lamCaseE (map constructorCase constructors)
+  TH.lamCaseE (map constructorCase constructors)
   where typeDisplayExpression = typeDisplay typeVariables typeConstructorName
         constructorCase (Constructor (ValueConstructor valueConstructorName) fields) =
-          match (conP valueConstructorName (map (return . fieldPattern) indexedFields))
-                (normalB (appE presentationConstructor
-                               (listE (map fieldPresenter indexedFields))))
-                []
+          TH.match (TH.conP valueConstructorName (map (return . fieldPattern) indexedFields))
+                   (TH.normalB
+                      (TH.appE presentationConstructor (TH.listE (map fieldPresenter indexedFields))))
+                   []
           where presentationConstructor =
                   if isTuple typeConstructorName
-                     then appE (conE 'TuplePresentation)
-                               typeDisplayExpression
-                     else appE (appE (conE (if all (isJust . fst) fields
-                                               then 'RecordPresentation
-                                               else 'DataTypePresentation))
-                                     typeDisplayExpression)
-                               (litE (stringL (pprint valueConstructorName)))
+                     then TH.appE (TH.conE 'TupleValue) typeDisplayExpression
+                     else TH.appE (TH.appE (TH.conE (if all (isJust . fst) fields
+                                                        then 'RecordValue
+                                                        else 'DataValue))
+                                           typeDisplayExpression)
+                                  (TH.litE (TH.stringL (TH.pprint valueConstructorName)))
                 indexedFields = zip (map indexedFieldName [0 ..]) fields
-                fieldPattern (indexedName,_) = VarP indexedName
+                fieldPattern (indexedName,_) = TH.VarP indexedName
                 fieldPresenter (indexedName,(mvalueVariable,normalType)) =
-                  addField (appE (appE (varE 'snd)
-                                       (expressType typeVariables normalType))
-                                 (varE indexedName))
+                  addField (TH.appE (TH.appE (TH.varE 'snd)
+                                             (expressType typeVariables normalType))
+                                    (TH.varE indexedName))
                   where addField =
                           case mvalueVariable of
                             Nothing -> id
                             Just (ValueVariable fieldName) ->
-                              \e -> tupE [stringE (pprint fieldName),e]
+                              \e ->
+                                TH.tupE [TH.stringE (TH.pprint fieldName),e]
 
 -- | Generate an expression which displays a data type and its
 -- type variables as instantiated.
-typeDisplay :: [TypeVariable] -> Name -> Q Exp
-typeDisplay typeVariables name = (applyToVars . litE . stringL . pprint) name
+typeDisplay
+  :: [TypeVariable] -> TH.Name -> TH.Q TH.Exp
+typeDisplay typeVariables name =
+  (applyToVars . TH.litE . TH.stringL . TH.pprint) name
   where applyToVars typeConstructorDisplay
           | null typeVariables = typeConstructorDisplay
           | isTuple name =
             [|("(" ++
                intercalate
                  ","
-                 $(listE (map (\typeVariable ->
-                                 appE (varE 'fst)
-                                      (varE (presentVarName typeVariable)))
-                              typeVariables)) ++
+                 $(TH.listE (map (\typeVariable ->
+                                    TH.appE (TH.varE 'fst)
+                                            (TH.varE (presentVarName typeVariable)))
+                                 typeVariables)) ++
                ")")|]
           | otherwise =
-            appE (varE 'unwords)
-                 (infixE (Just (listE [typeConstructorDisplay]))
-                         (varE '(++))
-                         (Just (listE (map (\typeVariable ->
-                                              appE (varE 'parensIfNeeded)
-                                                   (appE (varE 'fst)
-                                                         (varE (presentVarName typeVariable))))
-                                           typeVariables))))
+            TH.appE (TH.varE 'unwords)
+                    (TH.infixE (Just (TH.listE [typeConstructorDisplay]))
+                               (TH.varE '(++))
+                               (Just (TH.listE (map (\typeVariable ->
+                                                       TH.appE (TH.varE 'parensIfNeeded)
+                                                               (TH.appE (TH.varE 'fst)
+                                                                        (TH.varE (presentVarName typeVariable))))
+                                                    typeVariables))))
 
 -- | Is a name a tuple?
-isTuple :: Name -> Bool
+isTuple :: TH.Name -> Bool
 isTuple typeConstructorName =
   any ((== typeConstructorName) . snd) tupleConstructors
 
@@ -557,86 +559,97 @@ parensIfNeeded e =
      else e
 
 -- | Make a name for an indexed field of a data type constructor.
-indexedFieldName :: Integer -> Name
-indexedFieldName index = mkName ("indexedField_" ++ show index)
+indexedFieldName :: Integer -> TH.Name
+indexedFieldName index = TH.mkName ("indexedField_" ++ show index)
 
 -- | Make a printer for a type-alias. This involves simply proxying to
 -- the real printer, whether that's a data type or a primitive, or
 -- another type-alias.
-typeAliasPresenter :: TypeConstructor -> TypeAlias -> Q [Dec]
+typeAliasPresenter
+  :: TypeConstructor -> TypeAlias -> TH.Q [TH.Dec]
 typeAliasPresenter typeConstructor@(TypeConstructor typeConstructorName) (TypeAlias typeVariables normalType) =
   presentingFunctionDeclaration
     typeConstructor
     typeVariables
-    (tupE [litE (stringL (pprint typeConstructorName))
-          ,appE (varE 'snd)
-                (expressType typeVariables normalType)])
+    (TH.tupE [TH.litE (TH.stringL (TH.pprint typeConstructorName))
+             ,TH.appE (TH.varE 'snd)
+                      (expressType typeVariables normalType)])
 
 -- | Make a presenting function.
-builtinFunctionDeclaration :: TypeConstructor -> Q Exp -> Q [Dec]
+builtinFunctionDeclaration
+  :: TypeConstructor -> TH.Q TH.Exp -> TH.Q [TH.Dec]
 builtinFunctionDeclaration typeConstructor body =
   do dec <-
-       valD (varP name)
-            (normalB body)
-            []
+       TH.valD (TH.varP name)
+               (TH.normalB body)
+               []
      return [dec]
   where name = presentConsName typeConstructor
 
 -- | Make a presenting function.
-presentingFunctionDeclaration :: TypeConstructor -> [TypeVariable] -> Q Exp -> Q [Dec]
+presentingFunctionDeclaration :: TypeConstructor
+                              -> [TypeVariable]
+                              -> TH.Q TH.Exp
+                              -> TH.Q [TH.Dec]
 presentingFunctionDeclaration typeConstructor@(TypeConstructor typeConstructorName) typeVariables body =
   do sig <-
-       sigD name
-            (forallT (map (\(TypeVariable typeVariable) -> PlainTV typeVariable) typeVariables)
-                     (return [])
-                     (foldl (\inner (TypeVariable typeVariable) ->
-                               let presentTypeVariable =
-                                     return (AppT (AppT (TupleT 2)
-                                                        (ConT ''String))
+       TH.sigD name
+               (TH.forallT
+                  (map (\(TypeVariable typeVariable) -> TH.PlainTV typeVariable) typeVariables)
+                  (return [])
+                  (foldl (\inner (TypeVariable typeVariable) ->
+                            let presentTypeVariable =
+                                  return (TH.AppT (TH.AppT (TH.TupleT 2)
+                                                           (TH.ConT ''String))
                                                   presenter)
-                                     where presenter =
-                                             AppT (AppT ArrowT (VarT typeVariable))
-                                                  (ConT ''Presentation)
-                               in appT (appT arrowT presentTypeVariable) inner)
-                            tupleType
-                            (reverse typeVariables)))
+                                  where presenter =
+                                          TH.AppT (TH.AppT TH.ArrowT (TH.VarT typeVariable))
+                                                  (TH.ConT ''Value)
+                            in TH.appT (TH.appT TH.arrowT presentTypeVariable) inner)
+                         tupleType
+                         (reverse typeVariables)))
      dec <-
        if null typeVariables
-          then valD (varP name)
-                    (normalB body)
-                    []
-          else funD name
-                    [clause (map (\typeVariable ->
-                                    varP (presentVarName typeVariable))
-                                 typeVariables)
-                            (normalB body)
-                            []]
+          then TH.valD (TH.varP name)
+                       (TH.normalB body)
+                       []
+          else TH.funD name
+                       [TH.clause (map (\typeVariable ->
+                                          TH.varP (presentVarName typeVariable))
+                                       typeVariables)
+                                  (TH.normalB body)
+                                  []]
      return [sig,dec]
   where name = presentConsName typeConstructor
         tupleType =
-          ((\string typ -> AppT (AppT (TupleT 2) string) typ) <$> conT ''String <*>
-           appT (appT arrowT appliedType)
-                (conT ''Presentation))
+          ((\string typ -> TH.AppT (TH.AppT (TH.TupleT 2) string) typ) <$>
+           TH.conT ''String <*>
+           TH.appT (TH.appT TH.arrowT appliedType)
+                   (TH.conT ''Value))
         appliedType =
-          foldl appT
-                (conT typeConstructorName)
-                (map (\(TypeVariable typeVariableName) -> varT typeVariableName) typeVariables)
+          foldl TH.appT
+                (TH.conT typeConstructorName)
+                (map (\(TypeVariable typeVariableName) ->
+                        TH.varT typeVariableName)
+                     typeVariables)
 
 --------------------------------------------------------------------------------
 -- Built-in printers
 
 -- | Are the names basically equal, disregarding package id buggerances?
-namesBasicallyEqual :: TypeConstructor -> TypeConstructor -> Bool
+namesBasicallyEqual
+  :: TypeConstructor -> TypeConstructor -> Bool
 namesBasicallyEqual (TypeConstructor this) (TypeConstructor that) =
   normalize this == normalize that
-  where normalize n@(Name name flavour) =
+  where normalize n@(TH.Name name flavour) =
           case flavour of
-            NameG _ _ modName -> Name name (NameQ modName)
+            TH.NameG _ _ modName -> TH.Name name (TH.NameQ modName)
             _ -> n
 
 -- | Printers for built-in data types with custom representations
 -- (think: primitives, tuples, etc.)
-builtInPresenters :: [(TypeConstructor,[TypeVariable] -> Exp -> Q Exp)]
+builtInPresenters
+  :: [(TypeConstructor,[TypeVariable] -> TH.Exp -> TH.Q TH.Exp)]
 builtInPresenters =
   concat [listPrinters
          ,integerPrinters
@@ -646,31 +659,31 @@ builtInPresenters =
          ,vectorPrinters]
 
 -- | Vectors.
-vectorPrinters :: [(TypeConstructor,[TypeVariable] -> Exp -> Q Exp)]
+vectorPrinters
+  :: [(TypeConstructor,[TypeVariable] -> TH.Exp -> TH.Q TH.Exp)]
 vectorPrinters =
   [makeVectorPrinter (qualified "Data.Vector" "Vector")
                      (qualified "Data.Vector" "toList")]
   where makeVectorPrinter typeName unpackFunction =
           (TypeConstructor typeName
           ,\(typeVariable:_) automaticPrinter ->
-             (let presentVar = varE (presentVarName typeVariable)
-              in lamE [varP (presentVarName typeVariable)]
-                      [|(let typeString =
-                               $(stringE (pprint typeName)) ++
-                               " " ++ parensIfNeeded (fst $(presentVar))
-                         in (typeString
-                            ,\xs ->
-                               ChoicePresentation
-                                 typeString
-                                 [("List"
-                                  ,ListPresentation
-                                     typeString
-                                     (map (snd $(presentVar))
-                                          ($(varE unpackFunction) xs)))
-                                 ,("Internal",$(return automaticPrinter) xs)]))|]))
+             (let presentVar = TH.varE (presentVarName typeVariable)
+              in TH.lamE [TH.varP (presentVarName typeVariable)]
+                         [|(let typeString =
+                                  $(TH.stringE (TH.pprint typeName)) ++
+                                  " " ++ parensIfNeeded (fst $(presentVar))
+                            in (typeString
+                               ,\xs ->
+                                  ChoiceValue
+                                    typeString
+                                    [("List"
+                                     ,ListValue typeString
+                                                (map (snd $(presentVar))
+                                                     ($(TH.varE unpackFunction) xs)))
+                                    ,("Internal",$(return automaticPrinter) xs)]))|]))
         qualified modName term =
-          Name (OccName term)
-               (NameQ (ModName modName))
+          TH.Name (TH.OccName term)
+                  (TH.NameQ (TH.ModName modName))
 
 -- | Packed strings; Text, ByteString.
 --
@@ -678,7 +691,8 @@ vectorPrinters =
 -- code generation, without actually needing the `present' package to
 -- depend on them directly.
 --
-packedStrings :: [(TypeConstructor,a -> Exp -> Q Exp)]
+packedStrings
+  :: [(TypeConstructor,a -> TH.Exp -> TH.Q TH.Exp)]
 packedStrings =
   [makeStringPrinter (qualified "Data.ByteString.Internal" "ByteString")
                      (qualified "Data.ByteString.Char8" "unpack")
@@ -691,78 +705,76 @@ packedStrings =
   where makeStringPrinter typeName unpackFunction =
           (TypeConstructor typeName
           ,\_ internal ->
-             [|let typeString = $(stringE (pprint typeName))
+             [|let typeString = $(TH.stringE (TH.pprint typeName))
                in (typeString
                   ,\xs ->
-                     ChoicePresentation
+                     ChoiceValue
                        typeString
                        [("String"
-                        ,StringPresentation typeString
-                                            ($(varE unpackFunction) xs))
+                        ,StringValue typeString
+                                     ($(TH.varE unpackFunction) xs))
                        ,("Internal",$(return internal) xs)])|])
         qualified modName term =
-          Name (OccName term)
-               (NameQ (ModName modName))
+          TH.Name (TH.OccName term)
+                  (TH.NameQ (TH.ModName modName))
 
 -- | Printers for list-like types.
-listPrinters :: [(TypeConstructor, [TypeVariable] -> Exp -> Q Exp)]
+listPrinters
+  :: [(TypeConstructor,[TypeVariable] -> TH.Exp -> TH.Q TH.Exp)]
 listPrinters =
   [(TypeConstructor ''[]
    ,\(typeVariable:_) _automaticPrinter ->
-      (let presentVar = varE (presentVarName typeVariable)
-       in lamE [varP (presentVarName typeVariable)]
-               [|(let typeString = "[" ++ fst $(presentVar) ++ "]"
-                  in (typeString
-                     ,\xs ->
-                        case fst $(presentVar) of
-                          "GHC.Types.Char" ->
-                            ChoicePresentation
-                              "String"
-                              [("String"
-                               ,StringPresentation "String"
-                                                   (concatMap getCh (map (snd $(presentVar)) xs)))
-                              ,("List of characters"
-                               ,ListPresentation typeString
-                                                 (map (snd $(presentVar)) xs))]
-                            where getCh (CharPresentation "GHC.Types.Char" ch) =
-                                    ch
-                                  getCh (ChoicePresentation _ ((_,CharPresentation _ ch):_)) =
-                                    ch
-                                  getCh _ = ""
-                          _ ->
-                            ListPresentation typeString
-                                             (map (snd $(presentVar)) xs)))|]))]
+      (let presentVar = TH.varE (presentVarName typeVariable)
+       in TH.lamE [TH.varP (presentVarName typeVariable)]
+                  [|(let typeString = "[" ++ fst $(presentVar) ++ "]"
+                     in (typeString
+                        ,\xs ->
+                           case fst $(presentVar) of
+                             "GHC.Types.Char" ->
+                               ChoiceValue
+                                 "String"
+                                 [("String"
+                                  ,StringValue "String"
+                                               (concatMap getCh (map (snd $(presentVar)) xs)))
+                                 ,("List of characters"
+                                  ,ListValue typeString (map (snd $(presentVar)) xs))]
+                               where getCh (CharValue "GHC.Types.Char" ch) = ch
+                                     getCh (ChoiceValue _ ((_,CharValue _ ch):_)) =
+                                       ch
+                                     getCh _ = ""
+                             _ ->
+                               ListValue typeString (map (snd $(presentVar)) xs)))|]))]
 
 -- | Printers for character-like types.
-charPrinters :: [(TypeConstructor, a -> Exp -> Q Exp)]
+charPrinters
+  :: [(TypeConstructor,a -> TH.Exp -> TH.Q TH.Exp)]
 charPrinters = map makeCharPrinter [''Char]
   where makeCharPrinter name =
           (TypeConstructor name
           ,\_ automaticPrinter ->
-             [|($(stringE (show name))
+             [|($(TH.stringE (show name))
                ,\c ->
-                  ChoicePresentation
-                    $(stringE (show name))
+                  ChoiceValue
+                    $(TH.stringE (show name))
                     [("Character"
-                     ,CharPresentation $(stringE (show name))
-                                       (return c))
+                     ,CharValue $(TH.stringE (show name))
+                                (return c))
                     ,("Unicode point",($(intPrinter Nothing name) (ord c)))
                     ,("Internal",$(return automaticPrinter) c)])|])
 
 -- | Printers for real number types.
-realPrinters :: [(TypeConstructor, a -> Exp -> Q Exp)]
-realPrinters =
-  map makeIntPrinter
-      [''Float
-      ,''Double]
+realPrinters
+  :: [(TypeConstructor,a -> TH.Exp -> TH.Q TH.Exp)]
+realPrinters = map makeIntPrinter [''Float,''Double]
   where makeIntPrinter name =
           (TypeConstructor name
           ,\_ automaticPrinter ->
-             [|($(stringE (show name))
+             [|($(TH.stringE (show name))
                ,$(floatingPrinter (Just automaticPrinter)
                                   name))|])
 -- | Printers for integral types.
-integerPrinters :: [(TypeConstructor, a -> Exp -> Q Exp)]
+integerPrinters
+  :: [(TypeConstructor,a -> TH.Exp -> TH.Q TH.Exp)]
 integerPrinters =
   map makeIntPrinter
       [''Integer
@@ -778,7 +790,7 @@ integerPrinters =
   where makeIntPrinter name =
           (TypeConstructor name
           ,\_ automaticPrinter ->
-             [|($(stringE (show name))
+             [|($(TH.stringE (show name))
                ,$(intPrinter (Just automaticPrinter)
                              name))|])
 
@@ -787,61 +799,63 @@ showRational :: Rational -> String
 showRational x = show (numerator x) ++ "/" ++ show (denominator x)
 
 -- | Floating point printer.
-floatingPrinter :: Maybe Exp -> Name -> Q Exp
+floatingPrinter
+  :: Maybe TH.Exp -> TH.Name -> TH.Q TH.Exp
 floatingPrinter mautomaticPrinter name =
   [|\x ->
-      ChoicePresentation
-        $(stringE (show name))
+      ChoiceValue
+        $(TH.stringE (show name))
         $(case mautomaticPrinter of
             Nothing ->
               [|[("Floating"
-                 ,IntegerPresentation $(stringE (show name))
-                                      (printf "%f" x))
+                 ,IntegerValue $(TH.stringE (show name))
+                               (printf "%f" x))
                 ,("Show"
-                 ,IntegerPresentation $(stringE (show name))
-                                      (show x))
+                 ,IntegerValue $(TH.stringE (show name))
+                               (show x))
                 ,("Rational"
-                 ,IntegerPresentation $(stringE (show name))
-                                      (showRational (toRational x)))]|]
+                 ,IntegerValue $(TH.stringE (show name))
+                               (showRational (toRational x)))]|]
             Just automaticPrinter ->
               [|[("Floating"
-                 ,IntegerPresentation $(stringE (show name))
-                                      (printf "%f" x))
+                 ,IntegerValue $(TH.stringE (show name))
+                               (printf "%f" x))
                 ,("Show"
-                 ,IntegerPresentation $(stringE (show name))
-                                      (show x))
+                 ,IntegerValue $(TH.stringE (show name))
+                               (show x))
                 ,("Rational"
-                 ,IntegerPresentation $(stringE (show name))
-                                      (showRational (toRational x)))
+                 ,IntegerValue $(TH.stringE (show name))
+                               (showRational (toRational x)))
                 ,("Internal",$(return automaticPrinter) x)]|])|]
 
 -- | Integer printer.
-intPrinter :: Maybe Exp -> Name -> Q Exp
+intPrinter
+  :: Maybe TH.Exp -> TH.Name -> TH.Q TH.Exp
 intPrinter mautomaticPrinter name =
   [|\x ->
-      ChoicePresentation
-        $(stringE (show name))
+      ChoiceValue
+        $(TH.stringE (show name))
         $(case mautomaticPrinter of
             Nothing ->
               [|[("Decimal"
-                 ,IntegerPresentation $(stringE (show name))
-                                      (show x))
+                 ,IntegerValue $(TH.stringE (show name))
+                               (show x))
                 ,("Hexadecimal"
-                 ,IntegerPresentation $(stringE (show name))
-                                      (Text.Printf.printf "%x" x))
+                 ,IntegerValue $(TH.stringE (show name))
+                               (Text.Printf.printf "%x" x))
                 ,("Binary"
-                 ,IntegerPresentation $(stringE (show name))
-                                      (Text.Printf.printf "%b" x))]|]
+                 ,IntegerValue $(TH.stringE (show name))
+                               (Text.Printf.printf "%b" x))]|]
             Just automaticPrinter ->
               [|[("Decimal"
-                 ,IntegerPresentation $(stringE (show name))
-                                      (show x))
+                 ,IntegerValue $(TH.stringE (show name))
+                               (show x))
                 ,("Hexadecimal"
-                 ,IntegerPresentation $(stringE (show name))
-                                      (Text.Printf.printf "%x" x))
+                 ,IntegerValue $(TH.stringE (show name))
+                               (Text.Printf.printf "%x" x))
                 ,("Binary"
-                 ,IntegerPresentation $(stringE (show name))
-                                      (Text.Printf.printf "%b" x))
+                 ,IntegerValue $(TH.stringE (show name))
+                               (Text.Printf.printf "%b" x))
                 ,("Internal",$(return automaticPrinter) x)]|])|]
 
 --------------------------------------------------------------------------------
@@ -855,74 +869,79 @@ intPrinter mautomaticPrinter name =
 -- | Make an expression for presenting a type. This doesn't actually
 -- do any unpacking of the data structures pertaining to the types,
 -- but rather makes calls to the functions that do.
-expressType :: [TypeVariable] -> NormalType -> Q Exp
+expressType
+  :: [TypeVariable] -> NormalType -> TH.Q TH.Exp
 expressType = go 0
   where go arity typeVariables =
           \case
             NormalVar ty ->
               if elem ty typeVariables
-                 then varE (presentVarName ty)
+                 then TH.varE (presentVarName ty)
                  else return (presentUnknownVar ty arity)
-            NormalCons cons -> varE (presentConsName cons)
+            NormalCons cons -> TH.varE (presentConsName cons)
             NormalPrimitive (PrimitiveTypeConstructor typeConstructorName) ->
               expressPrimitive typeConstructorName
             NormalFunction ty ->
-              return (TupE [LitE (StringL (pprint ty))
-                           ,LamE [WildP]
-                                 (AppE (ConE 'FunctionPresentation)
-                                       (LitE (StringL (pprint ty))))])
+              return (TH.TupE [TH.LitE (TH.StringL (TH.pprint ty))
+                              ,TH.LamE [TH.WildP]
+                                       (TH.AppE (TH.ConE 'FunctionValue)
+                                                (TH.LitE (TH.StringL (TH.pprint ty))))])
             NormalApp f args ->
-              foldl appE
+              foldl TH.appE
                     (go (length args) typeVariables f)
                     (map (go 0 typeVariables) args)
 
 -- | Express a primitive printer.
-expressPrimitive :: Name -> Q Exp
+expressPrimitive :: TH.Name -> TH.Q TH.Exp
 expressPrimitive typeConstructorName =
-  do info <- reify typeConstructorName
+  do info <- TH.reify typeConstructorName
      case info of
-       PrimTyConI _ arity _unlifted ->
+       TH.PrimTyConI _ arity _unlifted ->
          return (ignoreTypeVariables
                    arity
-                   (TupE [LitE (StringL (pprint typeConstructorName))
-                         ,LamE [WildP]
-                               (AppE (ConE 'PrimitivePresentation)
-                                     (LitE (StringL (pprint typeConstructorName))))]))
-       _ -> fail ("Mistaken primitive type: " ++ pprint typeConstructorName)
+                   (TH.TupE [TH.LitE (TH.StringL (TH.pprint typeConstructorName))
+                            ,TH.LamE [TH.WildP]
+                                     (TH.AppE (TH.ConE 'PrimitiveValue)
+                                              (TH.LitE (TH.StringL (TH.pprint typeConstructorName))))]))
+       _ -> fail ("Mistaken primitive type: " ++ TH.pprint typeConstructorName)
 
 -- | Name for a function name for presenting a type variable of a data
 -- type.
-presentUnknownVar :: TypeVariable -> Int -> Exp
+presentUnknownVar
+  :: TypeVariable -> Int -> TH.Exp
 presentUnknownVar (TypeVariable ty) arity =
   ignoreTypeVariables
     arity
-    (TupE [LitE (StringL (pprint ty))
-          ,LamE [WildP]
-                (AppE (ConE 'TypeVariablePresentation)
-                      (LitE (StringL (pprint ty))))])
+    (TH.TupE [TH.LitE (TH.StringL (TH.pprint ty))
+             ,TH.LamE [TH.WildP]
+                      (TH.AppE (TH.ConE 'TypeVariableValue)
+                               (TH.LitE (TH.StringL (TH.pprint ty))))])
 
 -- | Given the arity, make a lambda of that arity and ignore all the
 -- paramters.
-ignoreTypeVariables :: Int -> Exp -> Exp
+ignoreTypeVariables :: Int -> TH.Exp -> TH.Exp
 ignoreTypeVariables arity
   | arity == 0 = id
-  | otherwise = ParensE . LamE (replicate arity WildP)
+  | otherwise = TH.ParensE . TH.LamE (replicate arity TH.WildP)
 
 -- | Name for a function name for presenting a type variable of a data
 -- type.
-presentVarName :: TypeVariable -> Name
-presentVarName (TypeVariable ty) = mkName ("presentVar_" ++ normalizeName ty)
+presentVarName :: TypeVariable -> TH.Name
+presentVarName (TypeVariable ty) =
+  TH.mkName ("presentVar_" ++ normalizeName ty)
 
 -- | Name for a function name for presenting a type constructor.
-presentConsName :: TypeConstructor -> Name
-presentConsName (TypeConstructor ty) = mkName ("presentCons_" ++ normalizeName ty)
+presentConsName :: TypeConstructor -> TH.Name
+presentConsName (TypeConstructor ty) =
+  TH.mkName ("presentCons_" ++ normalizeName ty)
 
 -- | Normalize a name into a regular format.
-normalizeName :: Name -> String
+normalizeName :: TH.Name -> String
 normalizeName x = concatMap replace (show x)
   where replace 'z' = "zz"
-        replace c | isAlphaNum c = [c]
-                  | otherwise = "z" ++ printf "%x" (ord c)
+        replace c
+          | isAlphaNum c = [c]
+          | otherwise = "z" ++ printf "%x" (ord c)
 
 --------------------------------------------------------------------------------
 -- Extension classes
@@ -935,7 +954,8 @@ normalizeName x = concatMap replace (show x)
 
 -- | Get a mapping from type to instance methods of instances of
 -- Present, Present1, etc.
-getPresentInstances :: Q [(TypeConstructor,ValueVariable)]
+getPresentInstances
+  :: TH.Q [(TypeConstructor,ValueVariable)]
 getPresentInstances =
   do p0 <- getFor ''Present0
      p1 <- getFor ''Present1
@@ -944,65 +964,65 @@ getPresentInstances =
      p4 <- getFor ''Present4
      return (concat [p0,p1,p2,p3,p4])
   where getFor cls =
-          do result <- reify cls
+          do result <- TH.reify cls
              case result of
-               ClassI (ClassD _ _ _ _ [SigD method _]) instances ->
+               TH.ClassI (TH.ClassD _ _ _ _ [TH.SigD method _]) instances ->
                  return (mapMaybe (\i ->
                                      case i of
-                                       InstanceD _ (AppT (ConT _className) (ConT typeName)) _ ->
-                                         Just (TypeConstructor typeName,ValueVariable method)
+                                       TH.InstanceD _ (TH.AppT (TH.ConT _className) (TH.ConT typeName)) _ ->
+                                         Just (TypeConstructor typeName
+                                              ,ValueVariable method)
                                        _ -> Nothing)
                                   instances)
                _ -> return []
 
-class Present0 a where
-  present0
-    :: (String,a -> Presentation)
+class Present0 a  where
+  present0 :: (String,a -> Value)
 
 class Present1 a where
   present1
-    :: (String,x -> Presentation)
-    -> (String,a x -> Presentation)
+    :: (String,x -> Value)
+    -> (String,a x -> Value)
 
 class Present2 a where
   present2
-    :: (String,x -> Presentation)
-    -> (String,y -> Presentation)
-    -> (String,a x y -> Presentation)
+    :: (String,x -> Value)
+    -> (String,y -> Value)
+    -> (String,a x y -> Value)
 
 class Present3 a where
   present3
-    :: (String,x -> Presentation)
-    -> (String,y -> Presentation)
-    -> (String,z -> Presentation)
-    -> (String,a x y z -> Presentation)
+    :: (String,x -> Value)
+    -> (String,y -> Value)
+    -> (String,z -> Value)
+    -> (String,a x y z -> Value)
 
 class Present4 a where
   present4
-    :: (String,x -> Presentation)
-    -> (String,y -> Presentation)
-    -> (String,z -> Presentation)
-    -> (String,z0 -> Presentation)
-    -> (String,a x y z z0 -> Presentation)
+    :: (String,x -> Value)
+    -> (String,y -> Value)
+    -> (String,z -> Value)
+    -> (String,z0 -> Value)
+    -> (String,a x y z z0 -> Value)
 
 class Present5 a where
   present5
-    :: (String,x -> Presentation)
-    -> (String,y -> Presentation)
-    -> (String,z -> Presentation)
-    -> (String,z0 -> Presentation)
-    -> (String,z1 -> Presentation)
-    -> (String,a x y z z0 z1 -> Presentation)
+    :: (String,x -> Value)
+    -> (String,y -> Value)
+    -> (String,z -> Value)
+    -> (String,z0 -> Value)
+    -> (String,z1 -> Value)
+    -> (String,a x y z z0 z1 -> Value)
 
 class Present6 a where
   present6
-    :: (String,x -> Presentation)
-    -> (String,y -> Presentation)
-    -> (String,z -> Presentation)
-    -> (String,z0 -> Presentation)
-    -> (String,z1 -> Presentation)
-    -> (String,z2 -> Presentation)
-    -> (String,a x y z z0 z1 z2 -> Presentation)
+    :: (String,x -> Value)
+    -> (String,y -> Value)
+    -> (String,z -> Value)
+    -> (String,z0 -> Value)
+    -> (String,z1 -> Value)
+    -> (String,z2 -> Value)
+    -> (String,a x y z z0 z1 z2 -> Value)
 
 --------------------------------------------------------------------------------
 -- Actual Presenting
@@ -1011,26 +1031,25 @@ class Present6 a where
 -- for it and present the value in a self-contained let-expression.
 
 -- | Present whatever in scope is called `it'
-presentIt :: Q Exp
+presentIt :: TH.Q TH.Exp
 presentIt =
-  appE (makePresenterFor (mkName "it"))
-       (varE (mkName "it"))
+  TH.appE (makePresenterFor (TH.mkName "it"))
+          (TH.varE (TH.mkName "it"))
 
 -- | Make a presenter for the name
-makePresenterFor :: Name -> Q Exp
+makePresenterFor :: TH.Name -> TH.Q TH.Exp
 makePresenterFor name =
-  do result <- tryQ (reify name)
+  do result <- tryQ (TH.reify name)
      case result of
        Nothing -> fail "Name `it' isn't in scope."
-       Just (VarI _ ty _ _) ->
-         makeTypePresenter (return ty)
+       Just (TH.VarI _ ty _ _) -> makeTypePresenter (return ty)
        _ -> fail "The name `it' isn't a variable."
   where tryQ m =
-          recover (pure Nothing)
-                  (fmap Just m)
+          TH.recover (pure Nothing)
+                     (fmap Just m)
 
 -- | Present the value with the given type.
-makeTypePresenter :: Q Type -> Q Exp
+makeTypePresenter :: TH.Q TH.Type -> TH.Q TH.Exp
 makeTypePresenter getTy =
   do ty <- getTy
      let normalizeResult = normalizeType ty
@@ -1039,12 +1058,13 @@ makeTypePresenter getTy =
        Right normalType ->
          do instances <- getPresentInstances
             typeDefinitions <- normalTypeDefinitions normalType
-            presenters <- mapM (typeDefinitionPresenter instances) typeDefinitions
-            letE (map return (concat presenters))
-                 (infixE (Just (varE 'wrapExceptions))
-                         (varE '(.))
-                         (Just (appE (varE 'snd)
-                                     (expressType [] normalType))))
+            presenters <-
+              mapM (typeDefinitionPresenter instances) typeDefinitions
+            TH.letE (map return (concat presenters))
+                    (TH.infixE (Just (TH.varE 'wrapExceptions))
+                               (TH.varE '(.))
+                               (Just (TH.appE (TH.varE 'snd)
+                                              (expressType [] normalType))))
 
 --------------------------------------------------------------------------------
 -- Exception handling
@@ -1053,49 +1073,46 @@ makeTypePresenter getTy =
 -- structures, which is particular to Haskell, by returning that as a
 -- presentation, too. So instead of failing to present a data
 -- structure just because it has _|_ in it, let's instead put an
--- ExceptionPresentation inside it that can be presented to the user
+-- ExceptionValue inside it that can be presented to the user
 -- in a sensible manner.
 
 -- | Wrap any _|_ in the presentation with an exception handler.
-wrapExceptions :: Presentation -> Presentation
+wrapExceptions :: Value -> Value
 wrapExceptions = wrap . go
   where wrap =
           either (\(SomeException exception) ->
-                    ExceptionPresentation (show (typeOf exception))
-                                          (show exception))
+                    ExceptionValue (show (typeOf exception))
+                                   (show exception))
                  id .
           trySpoon
         go =
           \case
-            DataTypePresentation a b ps ->
-              DataTypePresentation a
-                                   b
-                                   (map wrapExceptions ps)
-            ChoicePresentation ty lps ->
-              ChoicePresentation ty
-                                 (map (second wrapExceptions) lps)
-            RecordPresentation ty c lps ->
-              RecordPresentation ty
-                                 c
-                                 (map (second wrapExceptions) lps)
-            ListPresentation ty ps ->
+            DataValue a b ps ->
+              DataValue a
+                            b
+                            (map wrapExceptions ps)
+            ChoiceValue ty lps ->
+              ChoiceValue ty
+                          (map (second wrapExceptions) lps)
+            RecordValue ty c lps ->
+              RecordValue ty
+                          c
+                          (map (second wrapExceptions) lps)
+            ListValue ty ps -> seq ps (ListValue ty (map wrapExceptions ps))
+            TupleValue ty ps ->
               seq ps
-                  (ListPresentation ty
-                                    (map wrapExceptions ps))
-            TuplePresentation ty ps ->
-              seq ps
-                  (TuplePresentation ty
-                                     (map wrapExceptions ps))
-            p@(CharPresentation _ x) -> seqString p x
-            p@(IntegerPresentation _ x) -> seqString p x
-            p@TypeVariablePresentation{} -> p
-            p@PrimitivePresentation{} -> p
-            p@FunctionPresentation{} -> p
-            p@(StringPresentation _ x) -> seqString p x
-            p@ExceptionPresentation{} -> p
+                  (TupleValue ty
+                              (map wrapExceptions ps))
+            p@(CharValue _ x) -> seqString p x
+            p@(IntegerValue _ x) -> seqString p x
+            p@TypeVariableValue{} -> p
+            p@PrimitiveValue{} -> p
+            p@FunctionValue{} -> p
+            p@(StringValue _ x) -> seqString p x
+            p@ExceptionValue{} -> p
 
 -- | Seq a string.
-seqString :: Presentation -> String -> Presentation
+seqString :: Value -> String -> Value
 seqString = foldl' (\presentation x -> seq x presentation)
 
 -- | Try to get a non-bottom value from the @a@, otherwise return the
@@ -1104,29 +1121,28 @@ trySpoon :: a -> Either SomeException a
 trySpoon a = unsafePerformIO (try (evaluate a))
 
 --------------------------------------------------------------------------------
--- Presentation mediums
+-- Value mediums
 --
 -- A presentation by itself is useless, it has to be presented in a
 -- medium.
 
 -- | To a familiar Show-like string.
-toShow :: Bool -> Presentation -> String
+toShow :: Bool -> Value -> String
 toShow qualified =
   \case
-    IntegerPresentation _ i -> i
-    ExceptionPresentation ex display ->
-      "<" ++ ex ++ ": " ++ show display ++ ">"
-    TypeVariablePresentation ty -> "<_ :: " ++ ty ++ ">"
-    CharPresentation _ c -> "'" ++ c ++ "'"
-    FunctionPresentation ty -> "<" ++ unwords (lines ty) ++ ">"
-    DataTypePresentation _type name slots ->
+    IntegerValue _ i -> i
+    ExceptionValue ex display -> "<" ++ ex ++ ": " ++ show display ++ ">"
+    TypeVariableValue ty -> "<_ :: " ++ ty ++ ">"
+    CharValue _ c -> "'" ++ c ++ "'"
+    FunctionValue ty -> "<" ++ unwords (lines ty) ++ ">"
+    DataValue _type name slots ->
       qualify name ++
       (if null slots
           then ""
           else " ") ++
       intercalate " "
                   (map recur slots)
-    RecordPresentation _type name fields ->
+    RecordValue _type name fields ->
       qualify name ++
       " {" ++
       intercalate ","
@@ -1134,40 +1150,40 @@ toShow qualified =
       "}"
       where showField (fname,slot) =
               qualify fname ++ " = " ++ toShow qualified slot
-    TuplePresentation _type slots ->
+    TupleValue _type slots ->
       "(" ++
       intercalate ","
                   (map (toShow qualified) slots) ++
       ")"
-    ListPresentation _type slots ->
+    ListValue _type slots ->
       "[" ++
       intercalate ","
                   (map (toShow qualified) slots) ++
       "]"
-    PrimitivePresentation p -> "<" ++ p ++ ">"
-    StringPresentation _ string -> show string
-    ChoicePresentation ty ((_,x):choices) ->
+    PrimitiveValue p -> "<" ++ p ++ ">"
+    StringValue _ string -> show string
+    ChoiceValue ty ((_,x):choices) ->
       case x of
-        ExceptionPresentation{} | not (null choices) ->
-          toShow qualified (ChoicePresentation ty choices)
+        ExceptionValue{}
+          | not (null choices) -> toShow qualified (ChoiceValue ty choices)
         _ -> toShow qualified x
-    ChoicePresentation _ [] -> "<no presentation choices>"
+    ChoiceValue _ [] -> "<no presentation choices>"
   where recur p
           | atomic p = toShow qualified p
           | otherwise = "(" ++ toShow qualified p ++ ")"
           where atomic =
                   \case
-                    ListPresentation{} -> True
-                    IntegerPresentation{} -> True
-                    CharPresentation{} -> True
-                    StringPresentation{} -> True
-                    ChoicePresentation ty ((_,x):xs) ->
+                    ListValue{} -> True
+                    IntegerValue{} -> True
+                    CharValue{} -> True
+                    StringValue{} -> True
+                    ChoiceValue ty ((_,x):xs) ->
                       case x of
-                        ExceptionPresentation{} | not (null xs) ->
-                          atomic (ChoicePresentation ty xs)
+                        ExceptionValue{}
+                          | not (null xs) -> atomic (ChoiceValue ty xs)
                         _ -> atomic x
-                    DataTypePresentation _ _ [] -> True
-                    PrimitivePresentation _ -> True
+                    DataValue _ _ [] -> True
+                    PrimitiveValue _ -> True
                     _ -> False
         qualify x =
           if qualified
