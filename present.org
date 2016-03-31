@@ -1,11 +1,9 @@
-* TODO Include structured Names and Types in output (protect users from TH)
+* TODO Put type in ExceptionValue
 * TODO Add notion of size in output
 * TODO Add strict/unstrict fields
 * TODO Include storage requirements in the output
 * TODO Make Emacs impl.
 * TODO Make browser-based demo
-* TODO Make structured type type
-* TODO Write lazy ID-based printer
 * TODO Write test suite
 * TODO Support data instances (Data.Vector.Unboxed)
 * TODO Existentials
@@ -124,3 +122,13 @@ data X a b = Cons a b (X b a) | Nil
 * DONE Support extension via classes (incl. passing a default printer)
   CLOSED: [2016-03-25 Fri 22:38]
   - State "DONE"       from "TODO"       [2016-03-25 Fri 22:38]
+* DONE Write lazy ID-based printer
+  CLOSED: [2016-03-31 Thu 15:51]
+  - State "DONE"       from "TODO"       [2016-03-31 Thu 15:51]
+  CLOCK: [2016-03-31 Thu 14:31]--[2016-03-31 Thu 14:31] =>  0:00
+* DONE Make choice for list of lazy cons by cons or full
+  CLOSED: [2016-03-31 Thu 15:51]
+  - State "DONE"       from "TODO"       [2016-03-31 Thu 15:51]
+* DONE Implement JSON output
+  CLOSED: [2016-03-31 Thu 22:49]
+  - State "DONE"       from "TODO"       [2016-03-31 Thu 22:49]

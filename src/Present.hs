@@ -12,8 +12,11 @@ module Present
   ,makeTypePresenter
   -- * Presentation mediums
   ,toShow
+  ,toWHNF
+  ,whnfJson
   -- * Types
   ,Value(..)
+  ,WHNF(..)
   -- * Customization classes
   ,Present0(..)
   ,Present1(..)
@@ -35,6 +38,7 @@ import           Data.Ratio (numerator,denominator)
 import           Data.String (IsString)
 import           Data.Typeable (typeOf)
 import           Data.Word (Word8,Word32,Word64)
+import           Numeric (showHex)
 import           System.IO.Unsafe (unsafePerformIO)
 import           Text.Printf (printf)
 
@@ -422,6 +426,7 @@ data Value
   | StringValue String String
   | TupleValue String [Value]
   | ExceptionValue String String
+  deriving (Show)
 
 -- | Make a presenter for a type definition.
 typeDefinitionPresenter :: [(TypeConstructor,ValueVariable)]
@@ -720,21 +725,7 @@ listPrinters =
                   [|(let typeString = "[" ++ fst $(presentVar) ++ "]"
                      in (typeString
                         ,\xs ->
-                           case fst $(presentVar) of
-                             "GHC.Types.Char" ->
-                               ChoiceValue
-                                 "String"
-                                 [("String"
-                                  ,StringValue "String"
-                                               (concatMap getCh (map (snd $(presentVar)) xs)))
-                                 ,("List of characters"
-                                  ,ListValue typeString (map (snd $(presentVar)) xs))]
-                               where getCh (CharValue "GHC.Types.Char" ch) = ch
-                                     getCh (ChoiceValue _ ((_,CharValue _ ch):_)) =
-                                       ch
-                                     getCh _ = ""
-                             _ ->
-                               ListValue typeString (map (snd $(presentVar)) xs)))|]))]
+                           ListValue typeString (map (snd $(presentVar)) xs)))|]))]
 
 -- | Printers for character-like types.
 charPrinters
@@ -1146,11 +1137,16 @@ toShow qualified =
       intercalate ","
                   (map (toShow qualified) slots) ++
       ")"
-    ListValue _type slots ->
-      "[" ++
-      intercalate ","
-                  (map (toShow qualified) slots) ++
-      "]"
+    ListValue typ slots ->
+      if typ == "[GHC.Types.Char]"
+         then show (concatMap (\case
+                                  CharValue _ c -> c
+                                  ChoiceValue _ ((_,CharValue _ c):_) -> c
+                                  _ -> []) slots)
+         else "[" ++
+              intercalate ","
+                          (map (toShow qualified) slots) ++
+              "]"
     PrimitiveValue p -> "<" ++ p ++ ">"
     StringValue _ string -> show string
     ChoiceValue ty ((_,x):choices) ->
@@ -1180,3 +1176,249 @@ toShow qualified =
           if qualified
              then x
              else reverse (takeWhile (/= '.') (reverse x))
+
+-- | A presentation of a value up to WHNF.
+data WHNF
+  = DataWHNF String String [(String,[Integer])]
+  | TypeVariableWHNF String
+  | PrimitiveWHNF String
+  | FunctionWHNF String
+  | CharWHNF String String
+  | IntegerWHNF String String
+  | ChoiceWHNF String [(String,[Integer])]
+  | RecordWHNF String String [(String,String,[Integer])]
+  | ListConsWHNF String [Integer] [Integer]
+  | ListEndWHNF String
+  | StringWHNF String String
+  | TupleWHNF String [(String,[Integer])]
+  | ExceptionWHNF String String
+  deriving (Show)
+
+-- | Produce a presentation of the value to WHNF.
+toWHNF :: [Integer] -- ^ Cursor.
+       -> Value     -- ^ Value to cursor into.
+       -> WHNF      -- ^ A WHNF presentation of the value at @cursor@.
+toWHNF = go []
+  where go
+          :: [Integer] -> [Integer] -> Value -> WHNF
+        go stack cursor =
+          \case
+            DataValue typ name slots ->
+              case cursor of
+                (slot:subCursor) ->
+                  case lookup slot (zip [0 ..] slots) of
+                    Nothing -> error "toWHNF: Invalid slot."
+                    Just value -> go (push [slot]) subCursor value
+                _ ->
+                  DataWHNF typ
+                           name
+                           (zipWith (\index slot ->
+                                       (valueType slot,push (cursor ++ [index])))
+                                    [0 ..]
+                                    slots)
+            ChoiceValue ty slots ->
+              case cursor of
+                (slot:subCursor) ->
+                  case lookup slot (zip [0 ..] slots) of
+                    Nothing -> error "toWHNF: Invalid slot."
+                    Just (_,value) -> go (push [slot]) subCursor value
+                _ ->
+                  ChoiceWHNF
+                    ty
+                    (zipWith (\index (string,_) ->
+                                (string,push (cursor ++ [index])))
+                             [0 ..]
+                             slots)
+            RecordValue typ name slots ->
+              case cursor of
+                (slot:subCursor) ->
+                  case lookup slot (zip [0 ..] slots) of
+                    Nothing -> error "toWHNF: Invalid slot."
+                    Just (_,value) -> go (push [slot]) subCursor value
+                _ ->
+                  RecordWHNF
+                    typ
+                    name
+                    (zipWith (\index (fname,slot) ->
+                                (valueType slot,fname,push (cursor ++ [index])))
+                             [0 ..]
+                             slots)
+            ListValue ty slots ->
+              case cursor of
+                (slot:subCursor) ->
+                  case slot of
+                    0 ->
+                      case slots of
+                        (value0:_) -> go (push [slot]) subCursor value0
+                        _ -> ListEndWHNF ty
+                    _ ->
+                      case slots of
+                        (_:value1) ->
+                          go (push [slot])
+                             subCursor
+                             (ListValue ty value1)
+                        _ -> ListEndWHNF ty
+                _ ->
+                  case slots of
+                    [] -> ListEndWHNF ty
+                    (_:_) ->
+                      ListConsWHNF ty
+                                   (push cursor ++ [0])
+                                   (push cursor ++ [1])
+            TupleValue ty slots ->
+              case cursor of
+                (slot:subCursor) ->
+                  case lookup slot (zip [0 ..] slots) of
+                    Nothing -> error "toWHNF: Invalid slot."
+                    Just value -> go (push [slot]) subCursor value
+                _ ->
+                  TupleWHNF ty
+                            (zipWith (\index slot ->
+                                        (valueType slot
+                                        ,push (cursor ++ [index])))
+                                     [0 ..]
+                                     slots)
+            TypeVariableValue ty -> TypeVariableWHNF ty
+            PrimitiveValue ty -> PrimitiveWHNF ty
+            FunctionValue ty -> FunctionWHNF ty
+            CharValue ty ch -> CharWHNF ty ch
+            IntegerValue ty rep -> IntegerWHNF ty rep
+            StringValue ty str -> StringWHNF ty str
+            ExceptionValue ty c -> ExceptionWHNF ty c
+          where push xs = stack ++ xs
+
+-- | Get the type of a value.
+valueType :: Value -> String
+valueType =
+  \case
+     DataValue ty _ _ -> ty
+     TypeVariableValue ty -> ty
+     PrimitiveValue ty -> ty
+     FunctionValue ty -> ty
+     CharValue ty _ -> ty
+     IntegerValue ty _ -> ty
+     ChoiceValue ty _ -> ty
+     RecordValue ty _ _ -> ty
+     ListValue ty _ -> ty
+     StringValue ty _ -> ty
+     TupleValue ty _ -> ty
+     ExceptionValue ty _ -> ty
+
+-- | Make JSON from WNHF.
+whnfJson :: WHNF -> String
+whnfJson =
+  \case
+    DataWHNF ty name slots ->
+      jsonObject
+        [("constructor",jsonString "data")
+        ,("type",jsonString ty)
+        ,("name",jsonString name)
+        ,("slots"
+         ,jsonList (map (\(typ,sid) ->
+                           jsonObject
+                             [("type",jsonString typ)
+                             ,("id",jsonList (map jsonInteger sid))])
+                        slots))]
+    TypeVariableWHNF var ->
+      jsonObject
+        [("constructor",jsonString "type-variable"),("type",jsonString var)]
+    PrimitiveWHNF name ->
+      jsonObject
+        [("constructor",jsonString "primitive"),("type",jsonString name)]
+    FunctionWHNF ty ->
+      jsonObject [("constructor",jsonString "primitive"),("type",jsonString ty)]
+    CharWHNF ty string ->
+      jsonObject
+        [("constructor",jsonString "char")
+        ,("type",jsonString ty)
+        ,("string",jsonString string)]
+    IntegerWHNF ty string ->
+      jsonObject
+        [("constructor",jsonString "integer")
+        ,("type",jsonString ty)
+        ,("string",jsonString string)]
+    ChoiceWHNF ty slots ->
+      jsonObject
+        [("constructor",jsonString "choice")
+        ,("type",jsonString ty)
+        ,("slots"
+         ,jsonList (map (\(typ,sid) ->
+                           jsonObject
+                             [("title",jsonString typ)
+                             ,("id",jsonList (map jsonInteger sid))])
+                        slots))]
+    RecordWHNF ty name slots ->
+      jsonObject
+        [("constructor",jsonString "record")
+        ,("type",jsonString ty)
+        ,("name",jsonString name)
+        ,("slots"
+         ,jsonList (map (\(typ,name',sid) ->
+                           jsonObject
+                             [("type",jsonString typ)
+                             ,("name",jsonString name')
+                             ,("id",jsonList (map jsonInteger sid))])
+                        slots))]
+    ListConsWHNF typ x xs ->
+      jsonObject
+        [("constructor",jsonString "list-cons")
+        ,("type",jsonString typ)
+        ,("car",jsonList (map jsonInteger x))
+        ,("cdr",jsonList (map jsonInteger xs))]
+    ListEndWHNF typ ->
+      jsonObject [("constructor",jsonString "list-end"),("type",jsonString typ)]
+    StringWHNF typ string ->
+      jsonObject
+        [("constructor",jsonString "string")
+        ,("type",jsonString typ)
+        ,("string",jsonString string)]
+    TupleWHNF ty slots ->
+      jsonObject
+        [("constructor",jsonString "tuple")
+        ,("type",jsonString ty)
+        ,("slots"
+         ,jsonList (map (\(typ,sid) ->
+                           jsonObject
+                             [("type",jsonString typ)
+                             ,("id",jsonList (map jsonInteger sid))])
+                        slots))]
+    ExceptionWHNF typ shown ->
+      jsonObject
+        [("constructor",jsonString "exception")
+        ,("type",jsonString typ)
+        ,("string",jsonString shown)]
+  where jsonString :: String -> String
+        jsonString = (\x -> "\"" ++ x ++ "\"") . go
+          where go s1 =
+                  case s1 of
+                    (x:xs)
+                      | x < '\x20' ->
+                        '\\' :
+                        encControl x
+                                   (go xs)
+                    ('"':xs) -> '\\' : '"' : go xs
+                    ('\\':xs) -> '\\' : '\\' : go xs
+                    (x:xs) -> x : go xs
+                    "" -> ""
+                encControl x xs =
+                  case x of
+                    '\b' -> 'b' : xs
+                    '\f' -> 'f' : xs
+                    '\n' -> 'n' : xs
+                    '\r' -> 'r' : xs
+                    '\t' -> 't' : xs
+                    _
+                      | x < '\x10' -> 'u' : '0' : '0' : '0' : hexxs
+                      | x < '\x100' -> 'u' : '0' : '0' : hexxs
+                      | x < '\x1000' -> 'u' : '0' : hexxs
+                      | otherwise -> 'u' : hexxs
+                      where hexxs = showHex (fromEnum x) xs
+        jsonObject fields =
+          "{" ++
+          intercalate ", "
+                      (map makeField fields) ++
+          "}"
+          where makeField (name,value) = jsonString name ++ ": " ++ value
+        jsonList xs = "[" ++ intercalate ", " xs ++ "]"
+        jsonInteger :: Integer -> String
+        jsonInteger = show
