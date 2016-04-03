@@ -497,7 +497,8 @@ dataTypePresenterBody (TypeConstructor typeConstructorName) (DataType typeVariab
           where presentationConstructor =
                   if isTuple typeConstructorName
                      then TH.appE (TH.conE 'TupleValue) typeDisplayExpression
-                     else TH.appE (TH.appE (TH.conE (if all (isJust . fst) fields
+                     else TH.appE (TH.appE (TH.conE (if any (isJust . fst) fields &&
+                                                        not (null fields)
                                                         then 'RecordValue
                                                         else 'DataValue))
                                            typeDisplayExpression)
