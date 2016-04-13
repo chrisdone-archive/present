@@ -1,3 +1,4 @@
+* TODO Handle empty data decls
 * TODO Put type in ExceptionValue
 * TODO Add notion of size in output
 * TODO Add strict/unstrict fields
