@@ -756,7 +756,7 @@ charPrinters = map makeCharPrinter [''Char]
 -- | Printers for pointer types.
 pointerPrinters
   :: [(TypeConstructor,[TypeVariable] -> TH.Exp -> TH.Q TH.Exp)]
-pointerPrinters = map makePtrPrinter [''Ptr,''ForeignPtr]
+pointerPrinters = map makePtrPrinter [''Ptr,''ForeignPtr,''FunPtr]
   where makePtrPrinter name =
           (TypeConstructor name
           ,\(typeVariable:_) automaticPrinter ->
