@@ -42,6 +42,8 @@ import           Data.Ratio (numerator,denominator)
 import           Data.String (IsString)
 import           Data.Typeable (typeOf)
 import           Data.Word (Word8,Word32,Word64)
+import           Foreign.ForeignPtr
+import           Foreign.Ptr
 import           Numeric (showHex)
 import           System.IO.Unsafe (unsafePerformIO)
 import           Text.Printf (printf)
@@ -657,7 +659,8 @@ builtInPresenters =
          ,realPrinters
          ,charPrinters
          ,packedStrings
-         ,vectorPrinters]
+         ,vectorPrinters
+         ,pointerPrinters]
 
 -- | Vectors.
 vectorPrinters
@@ -749,6 +752,28 @@ charPrinters = map makeCharPrinter [''Char]
                     ,("Unicode point",($(intPrinter Nothing name) (ord c)))
                     ,("Internal",$(return automaticPrinter) c)])|])
 
+
+-- | Printers for pointer types.
+pointerPrinters
+  :: [(TypeConstructor,[TypeVariable] -> TH.Exp -> TH.Q TH.Exp)]
+pointerPrinters = map makePtrPrinter [''Ptr,''ForeignPtr]
+  where makePtrPrinter name =
+          (TypeConstructor name
+          ,\(typeVariable:_) automaticPrinter ->
+             (let presentVar = TH.varE (presentVarName typeVariable)
+              in TH.lamE [TH.varP (presentVarName typeVariable)]
+                         [|(let typeString =
+                                  $(TH.stringE (show name)) ++
+                                  " " ++ parensIfNeeded (fst $(presentVar))
+                            in (typeString
+                               ,\x ->
+                                  ChoiceValue
+                                    typeString
+                                    [("Pointer"
+                                     ,IntegerValue typeString
+                                                   (show x))
+                                    ,("Internal",$(return automaticPrinter) x)]))|]))
+
 -- | Printers for real number types.
 realPrinters
   :: [(TypeConstructor,a -> TH.Exp -> TH.Q TH.Exp)]
@@ -759,6 +784,7 @@ realPrinters = map makeIntPrinter [''Float,''Double]
              [|($(TH.stringE (show name))
                ,$(floatingPrinter (Just automaticPrinter)
                                   name))|])
+
 -- | Printers for integral types.
 integerPrinters
   :: [(TypeConstructor,a -> TH.Exp -> TH.Q TH.Exp)]
