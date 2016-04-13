@@ -1,3 +1,5 @@
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -8,12 +10,14 @@
 module Present
   (-- * Presenting functions
    presentIt
-  ,makePresenterFor
-  ,makeTypePresenter
+  ,presentName
+  ,presentType
   -- * Presentation mediums
   ,toShow
   ,toWHNF
   ,whnfJson
+  -- * Debugging convenience functions
+  ,presentShow
   -- * Types
   ,Value(..)
   ,WHNF(..)
@@ -1015,25 +1019,24 @@ class Present6 a where
 
 -- | Present whatever in scope is called `it'
 presentIt :: TH.Q TH.Exp
-presentIt =
-  TH.appE (makePresenterFor (TH.mkName "it"))
-          (TH.varE (TH.mkName "it"))
+presentIt = presentName (TH.mkName "it")
 
 -- | Make a presenter for the name
-makePresenterFor :: TH.Name -> TH.Q TH.Exp
-makePresenterFor name =
+presentName :: TH.Name -> TH.Q TH.Exp
+presentName name =
   do result <- tryQ (TH.reify name)
      case result of
        Nothing -> fail "Name `it' isn't in scope."
-       Just (TH.VarI _ ty _ _) -> makeTypePresenter (return ty)
+       Just (TH.VarI _ ty _ _) -> TH.appE (presentType (return ty))
+                                          (TH.varE name)
        _ -> fail "The name `it' isn't a variable."
   where tryQ m =
           TH.recover (pure Nothing)
                      (fmap Just m)
 
 -- | Present the value with the given type.
-makeTypePresenter :: TH.Q TH.Type -> TH.Q TH.Exp
-makeTypePresenter getTy =
+presentType :: TH.Q TH.Type -> TH.Q TH.Exp
+presentType getTy =
   do ty <- getTy
      let normalizeResult = normalizeType ty
      case normalizeResult of
@@ -1048,6 +1051,16 @@ makeTypePresenter getTy =
                                (TH.varE '(.))
                                (Just (TH.appE (TH.varE 'snd)
                                               (expressType [] normalType))))
+
+--------------------------------------------------------------------------------
+-- Debugging helpers
+
+-- | Present a value and then use 'toShow' on it.
+--
+-- >>> :t $(presentShow [t|Maybe Int|])
+-- $(presentShow [t|Maybe Int|]) :: Maybe Int -> String
+presentShow :: TH.Q TH.Type -> TH.Q TH.Exp
+presentShow ty = [|toShow False . $(presentType ty)|]
 
 --------------------------------------------------------------------------------
 -- Exception handling
