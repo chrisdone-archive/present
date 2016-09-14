@@ -353,7 +353,8 @@ makeConstructor =
     TH.InfixC t1 name t2 ->
       Constructor <$> pure (ValueConstructor name) <*>
       ((\x y -> [x,y]) <$> makeSlot t1 <*> makeSlot t2)
-    TH.ForallC _ _ _ -> fail "Existentials aren't supported."
+    (TH.ForallC _ _ con) ->
+      makeConstructor con
   where makeSlot (_,ty) = (Nothing,) <$> normalizeType ty
         makeField (name,_,ty) =
           (Just (ValueVariable name),) <$> normalizeType ty
