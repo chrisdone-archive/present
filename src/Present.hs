@@ -132,6 +132,10 @@ normalizeType = go
             TH.StarT -> fail "Star (*) is not supported."
             TH.ConstraintT -> fail "Constraints are not supported."
             TH.LitT _ -> fail "Type-level literals are not supported."
+            TH.InfixT{} -> fail "Infix type constructors are not supported."
+            TH.UInfixT{} -> fail "Unresolved infix type constructors are not supported."
+            TH.ParensT _ -> fail "Parenthesized types are not supported."
+            TH.WildCardT -> fail "Wildcard types are not supported."
 
 -- | Is the type a function?
 isFunction :: TH.Type -> Bool
@@ -310,11 +314,11 @@ reifyTypeDefinition typeConstructor@(TypeConstructor name) =
            case info of
              TH.TyConI dec ->
                case dec of
-                 TH.DataD _cxt _ vars cons _deriving ->
+                 TH.DataD _cxt0 _ vars _mkind cons _cxt1 ->
                    do cs <- mapM makeConstructor cons
                       return (Just (DataTypeDefinition typeConstructor
                                                        (DataType (map toTypeVariable vars) cs)))
-                 TH.NewtypeD _cxt _ vars con _deriving ->
+                 TH.NewtypeD _cxt0 _ vars _mkind con _cxt1 ->
                    do c <- makeConstructor con
                       return (Just (DataTypeDefinition
                                       typeConstructor
@@ -355,6 +359,10 @@ makeConstructor =
       ((\x y -> [x,y]) <$> makeSlot t1 <*> makeSlot t2)
     (TH.ForallC _ _ con) ->
       makeConstructor con
+    TH.GadtC _ _ _ ->
+      undefined -- FIXME
+    TH.RecGadtC _ _ _ ->
+      undefined -- FIXME
   where makeSlot (_,ty) = (Nothing,) <$> normalizeType ty
         makeField (name,_,ty) =
           (Just (ValueVariable name),) <$> normalizeType ty
@@ -983,7 +991,7 @@ getPresentInstances =
                TH.ClassI (TH.ClassD _ _ _ _ [TH.SigD method _]) instances ->
                  return (mapMaybe (\i ->
                                      case i of
-                                       TH.InstanceD _ (TH.AppT (TH.ConT _className) (TH.ConT typeName)) _ ->
+                                       TH.InstanceD _moverlap _ (TH.AppT (TH.ConT _className) (TH.ConT typeName)) _ ->
                                          Just (TypeConstructor typeName
                                               ,ValueVariable method)
                                        _ -> Nothing)
@@ -1054,7 +1062,7 @@ presentName name =
   do result <- tryQ (TH.reify name)
      case result of
        Nothing -> fail "Name `it' isn't in scope."
-       Just (TH.VarI _ ty _ _) -> TH.appE (presentType (return ty))
+       Just (TH.VarI _ ty _) -> TH.appE (presentType (return ty))
                                           (TH.varE name)
        _ -> fail "The name `it' isn't a variable."
   where tryQ m =
