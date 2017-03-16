@@ -1,6 +1,3 @@
-flags: {}
-extra-package-dbs: []
 packages:
 - '.'
-extra-deps: []
 resolver: lts-8.3

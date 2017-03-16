@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternGuards #-}
@@ -132,10 +133,12 @@ normalizeType = go
             TH.StarT -> fail "Star (*) is not supported."
             TH.ConstraintT -> fail "Constraints are not supported."
             TH.LitT _ -> fail "Type-level literals are not supported."
+#if MIN_VERSION_template_haskell(2,11,0)
             TH.InfixT{} -> fail "Infix type constructors are not supported."
             TH.UInfixT{} -> fail "Unresolved infix type constructors are not supported."
             TH.ParensT _ -> fail "Parenthesized types are not supported."
             TH.WildCardT -> fail "Wildcard types are not supported."
+#endif
 
 -- | Is the type a function?
 isFunction :: TH.Type -> Bool
@@ -314,11 +317,19 @@ reifyTypeDefinition typeConstructor@(TypeConstructor name) =
            case info of
              TH.TyConI dec ->
                case dec of
+#if MIN_VERSION_template_haskell(2,11,0)
                  TH.DataD _cxt0 _ vars _mkind cons _cxt1 ->
+#else
+                 TH.DataD _cxt _ vars cons _deriving ->
+#endif
                    do cs <- mapM makeConstructor cons
                       return (Just (DataTypeDefinition typeConstructor
                                                        (DataType (map toTypeVariable vars) cs)))
+#if MIN_VERSION_template_haskell(2,11,0)
                  TH.NewtypeD _cxt0 _ vars _mkind con _cxt1 ->
+#else
+                 TH.NewtypeD _cxt _ vars con _deriving ->
+#endif
                    do c <- makeConstructor con
                       return (Just (DataTypeDefinition
                                       typeConstructor
@@ -359,6 +370,7 @@ makeConstructor =
       ((\x y -> [x,y]) <$> makeSlot t1 <*> makeSlot t2)
     (TH.ForallC _ _ con) ->
       makeConstructor con
+#if MIN_VERSION_template_haskell(2,11,0)
     TH.GadtC names slots _type ->
       case names of
         name:_ -> -- FIXME: What about the other names?
@@ -371,6 +383,7 @@ makeConstructor =
           Constructor <$> pure (ValueConstructor name) <*> mapM makeField fields
         _ ->
           Left "GADT constructors without a name are not supported."
+#endif
   where makeSlot (_,ty) = (Nothing,) <$> normalizeType ty
         makeField (name,_,ty) =
           (Just (ValueVariable name),) <$> normalizeType ty
@@ -999,7 +1012,11 @@ getPresentInstances =
                TH.ClassI (TH.ClassD _ _ _ _ [TH.SigD method _]) instances ->
                  return (mapMaybe (\i ->
                                      case i of
+#if MIN_VERSION_template_haskell(2,11,0)
                                        TH.InstanceD _moverlap _ (TH.AppT (TH.ConT _className) (TH.ConT typeName)) _ ->
+#else
+                                       TH.InstanceD _ (TH.AppT (TH.ConT _className) (TH.ConT typeName)) _ ->
+#endif
                                          Just (TypeConstructor typeName
                                               ,ValueVariable method)
                                        _ -> Nothing)
@@ -1070,8 +1087,12 @@ presentName name =
   do result <- tryQ (TH.reify name)
      case result of
        Nothing -> fail "Name `it' isn't in scope."
-       Just (TH.VarI _ ty _) -> TH.appE (presentType (return ty))
-                                          (TH.varE name)
+#if MIN_VERSION_template_haskell(2,11,0)
+       Just (TH.VarI _ ty _) ->
+#else
+       Just (TH.VarI _ ty _ _) ->
+#endif
+         TH.appE (presentType (return ty)) (TH.varE name)
        _ -> fail "The name `it' isn't a variable."
   where tryQ m =
           TH.recover (pure Nothing)
