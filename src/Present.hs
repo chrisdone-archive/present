@@ -359,10 +359,18 @@ makeConstructor =
       ((\x y -> [x,y]) <$> makeSlot t1 <*> makeSlot t2)
     (TH.ForallC _ _ con) ->
       makeConstructor con
-    TH.GadtC _ _ _ ->
-      undefined -- FIXME
-    TH.RecGadtC _ _ _ ->
-      undefined -- FIXME
+    TH.GadtC names slots _type ->
+      case names of
+        name:_ -> -- FIXME: What about the other names?
+          Constructor <$> pure (ValueConstructor name) <*> mapM makeSlot slots
+        _ ->
+          Left "GADT constructors without a name are not supported."
+    TH.RecGadtC names fields _type ->
+      case names of
+        name:_ -> -- FIXME: What about the other names?
+          Constructor <$> pure (ValueConstructor name) <*> mapM makeField fields
+        _ ->
+          Left "GADT constructors without a name are not supported."
   where makeSlot (_,ty) = (Nothing,) <$> normalizeType ty
         makeField (name,_,ty) =
           (Just (ValueVariable name),) <$> normalizeType ty
