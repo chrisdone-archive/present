@@ -34,6 +34,7 @@ module Present
 
 import           Control.Arrow (second)
 import           Control.Exception (evaluate,SomeException(..),try,evaluate)
+import           Control.Monad (forM)
 import           Control.Monad.Trans.State.Strict (evalStateT,get,modify,StateT(..))
 import           Data.Char (isSpace,ord,isAlphaNum)
 import           Data.Int (Int8,Int16,Int32,Int64)
@@ -322,7 +323,7 @@ reifyTypeDefinition typeConstructor@(TypeConstructor name) =
 #else
                  TH.DataD _cxt _ vars cons _deriving ->
 #endif
-                   do cs <- mapM makeConstructor cons
+                   do cs <- concat <$> mapM makeConstructors cons
                       return (Just (DataTypeDefinition typeConstructor
                                                        (DataType (map toTypeVariable vars) cs)))
 #if MIN_VERSION_template_haskell(2,11,0)
@@ -330,11 +331,11 @@ reifyTypeDefinition typeConstructor@(TypeConstructor name) =
 #else
                  TH.NewtypeD _cxt _ vars con _deriving ->
 #endif
-                   do c <- makeConstructor con
+                   do cs <- makeConstructors con
                       return (Just (DataTypeDefinition
                                       typeConstructor
                                       (DataType (map toTypeVariable vars)
-                                                [c])))
+                                                cs)))
                  TH.TySynD _ vars ty ->
                    do ty' <- normalizeType ty
                       return (Just (TypeAliasDefinition typeConstructor
@@ -357,32 +358,29 @@ toTypeVariable =
     TH.KindedTV t _ -> TypeVariable t
 
 -- | Make a normalized constructor from the more complex TH Con.
-makeConstructor
-  :: TH.Con -> Either String Constructor
-makeConstructor =
+makeConstructors
+  :: TH.Con -> Either String [Constructor]
+makeConstructors =
   \case
-    TH.NormalC name slots ->
-      Constructor <$> pure (ValueConstructor name) <*> mapM makeSlot slots
-    TH.RecC name fields ->
-      Constructor <$> pure (ValueConstructor name) <*> mapM makeField fields
-    TH.InfixC t1 name t2 ->
-      Constructor <$> pure (ValueConstructor name) <*>
-      ((\x y -> [x,y]) <$> makeSlot t1 <*> makeSlot t2)
+    TH.NormalC name slots -> do
+      c <- Constructor <$> pure (ValueConstructor name) <*> mapM makeSlot slots
+      return [c]
+    TH.RecC name fields -> do
+      c <- Constructor <$> pure (ValueConstructor name) <*> mapM makeField fields
+      return [c]
+    TH.InfixC t1 name t2 -> do
+      c <- Constructor <$> pure (ValueConstructor name) <*>
+           ((\x y -> [x,y]) <$> makeSlot t1 <*> makeSlot t2)
+      return [c]
     (TH.ForallC _ _ con) ->
-      makeConstructor con
+      makeConstructors con
 #if MIN_VERSION_template_haskell(2,11,0)
     TH.GadtC names slots _type ->
-      case names of
-        name:_ -> -- FIXME: What about the other names?
-          Constructor <$> pure (ValueConstructor name) <*> mapM makeSlot slots
-        _ ->
-          Left "GADT constructors without a name are not supported."
+      forM names $ \name ->
+        Constructor <$> pure (ValueConstructor name) <*> mapM makeSlot slots
     TH.RecGadtC names fields _type ->
-      case names of
-        name:_ -> -- FIXME: What about the other names?
-          Constructor <$> pure (ValueConstructor name) <*> mapM makeField fields
-        _ ->
-          Left "GADT constructors without a name are not supported."
+      forM names $ \name ->
+        Constructor <$> pure (ValueConstructor name) <*> mapM makeField fields
 #endif
   where makeSlot (_,ty) = (Nothing,) <$> normalizeType ty
         makeField (name,_,ty) =
