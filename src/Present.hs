@@ -362,27 +362,24 @@ makeConstructors
   :: TH.Con -> Either String [Constructor]
 makeConstructors =
   \case
-    TH.NormalC name slots -> do
-      c <- Constructor <$> pure (ValueConstructor name) <*> mapM makeSlot slots
-      return [c]
-    TH.RecC name fields -> do
-      c <- Constructor <$> pure (ValueConstructor name) <*> mapM makeField fields
-      return [c]
-    TH.InfixC t1 name t2 -> do
-      c <- Constructor <$> pure (ValueConstructor name) <*>
-           ((\x y -> [x,y]) <$> makeSlot t1 <*> makeSlot t2)
-      return [c]
+    TH.NormalC name slots ->
+      (:[]) <$> makeConstructor name (mapM makeSlot slots)
+    TH.RecC name fields ->
+      (:[]) <$> makeConstructor name (mapM makeField fields)
+    TH.InfixC t1 name t2 ->
+      (:[]) <$> makeConstructor name ((\x y -> [x,y]) <$> makeSlot t1 <*> makeSlot t2)
     (TH.ForallC _ _ con) ->
       makeConstructors con
 #if MIN_VERSION_template_haskell(2,11,0)
     TH.GadtC names slots _type ->
       forM names $ \name ->
-        Constructor <$> pure (ValueConstructor name) <*> mapM makeSlot slots
+        makeConstructor name (mapM makeSlot slots)
     TH.RecGadtC names fields _type ->
       forM names $ \name ->
-        Constructor <$> pure (ValueConstructor name) <*> mapM makeField fields
+        makeConstructor name (mapM makeField fields)
 #endif
-  where makeSlot (_,ty) = (Nothing,) <$> normalizeType ty
+  where makeConstructor name efields = Constructor (ValueConstructor name) <$> efields
+        makeSlot (_,ty) = (Nothing,) <$> normalizeType ty
         makeField (name,_,ty) =
           (Just (ValueVariable name),) <$> normalizeType ty
 
