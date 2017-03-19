@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternGuards #-}
@@ -33,6 +34,7 @@ module Present
 
 import           Control.Arrow (second)
 import           Control.Exception (evaluate,SomeException(..),try,evaluate)
+import           Control.Monad (forM)
 import           Control.Monad.Trans.State.Strict (evalStateT,get,modify,StateT(..))
 import           Data.Char (isSpace,ord,isAlphaNum)
 import           Data.Int (Int8,Int16,Int32,Int64)
@@ -119,19 +121,25 @@ normalizeType = go
                          else NormalCons (TypeConstructor name))
             TH.TupleT i ->
               case lookup i tupleConstructors of
-                Nothing -> fail ("Tuple arity " ++ show i ++ " not supported.")
+                Nothing -> Left ("Tuple arity " ++ show i ++ " not supported.")
                 Just cons -> return (NormalCons (TypeConstructor cons))
             TH.ListT -> return (NormalCons (TypeConstructor ''[]))
-            TH.PromotedT _ -> fail "Promoted types are not supported."
-            TH.UnboxedTupleT _ -> fail "Unboxed tuples are not supported."
-            TH.ArrowT -> fail "The function arrow (->) is not supported."
-            TH.EqualityT -> fail "Equalities are not supported."
-            TH.PromotedTupleT _ -> fail "Promoted types are not supported."
-            TH.PromotedNilT -> fail "Promoted types are not supported."
-            TH.PromotedConsT -> fail "Promoted types are not supported."
-            TH.StarT -> fail "Star (*) is not supported."
-            TH.ConstraintT -> fail "Constraints are not supported."
-            TH.LitT _ -> fail "Type-level literals are not supported."
+            TH.PromotedT _ -> Left "Promoted types are not supported."
+            TH.UnboxedTupleT _ -> Left "Unboxed tuples are not supported."
+            TH.ArrowT -> Left "The function arrow (->) is not supported."
+            TH.EqualityT -> Left "Equalities are not supported."
+            TH.PromotedTupleT _ -> Left "Promoted types are not supported."
+            TH.PromotedNilT -> Left "Promoted types are not supported."
+            TH.PromotedConsT -> Left "Promoted types are not supported."
+            TH.StarT -> Left "Star (*) is not supported."
+            TH.ConstraintT -> Left "Constraints are not supported."
+            TH.LitT _ -> Left "Type-level literals are not supported."
+#if MIN_VERSION_template_haskell(2,11,0)
+            TH.InfixT{} -> Left "Infix type constructors are not supported."
+            TH.UInfixT{} -> Left "Unresolved infix type constructors are not supported."
+            TH.ParensT _ -> Left "Parenthesized types are not supported."
+            TH.WildCardT -> Left "Wildcard types are not supported."
+#endif
 
 -- | Is the type a function?
 isFunction :: TH.Type -> Bool
@@ -310,25 +318,33 @@ reifyTypeDefinition typeConstructor@(TypeConstructor name) =
            case info of
              TH.TyConI dec ->
                case dec of
+#if MIN_VERSION_template_haskell(2,11,0)
+                 TH.DataD _cxt0 _ vars _mkind cons _cxt1 ->
+#else
                  TH.DataD _cxt _ vars cons _deriving ->
-                   do cs <- mapM makeConstructor cons
+#endif
+                   do cs <- concat <$> mapM makeConstructors cons
                       return (Just (DataTypeDefinition typeConstructor
                                                        (DataType (map toTypeVariable vars) cs)))
+#if MIN_VERSION_template_haskell(2,11,0)
+                 TH.NewtypeD _cxt0 _ vars _mkind con _cxt1 ->
+#else
                  TH.NewtypeD _cxt _ vars con _deriving ->
-                   do c <- makeConstructor con
+#endif
+                   do cs <- makeConstructors con
                       return (Just (DataTypeDefinition
                                       typeConstructor
                                       (DataType (map toTypeVariable vars)
-                                                [c])))
+                                                cs)))
                  TH.TySynD _ vars ty ->
                    do ty' <- normalizeType ty
                       return (Just (TypeAliasDefinition typeConstructor
                                                         (TypeAlias (map toTypeVariable vars) ty')))
-                 _ -> fail "Not a supported data type declaration."
+                 _ -> Left "Not a supported data type declaration."
              TH.PrimTyConI{} -> return Nothing
-             TH.FamilyI{} -> fail "Data families not supported yet."
+             TH.FamilyI{} -> Left "Data families not supported yet."
              _ ->
-               fail ("Not a supported object, no type inside it: " ++
+               Left ("Not a supported object, no type inside it: " ++
                      TH.pprint info)
      case result of
        Left err -> fail err
@@ -342,20 +358,28 @@ toTypeVariable =
     TH.KindedTV t _ -> TypeVariable t
 
 -- | Make a normalized constructor from the more complex TH Con.
-makeConstructor
-  :: TH.Con -> Either String Constructor
-makeConstructor =
+makeConstructors
+  :: TH.Con -> Either String [Constructor]
+makeConstructors =
   \case
     TH.NormalC name slots ->
-      Constructor <$> pure (ValueConstructor name) <*> mapM makeSlot slots
+      (:[]) <$> makeConstructor name (mapM makeSlot slots)
     TH.RecC name fields ->
-      Constructor <$> pure (ValueConstructor name) <*> mapM makeField fields
+      (:[]) <$> makeConstructor name (mapM makeField fields)
     TH.InfixC t1 name t2 ->
-      Constructor <$> pure (ValueConstructor name) <*>
-      ((\x y -> [x,y]) <$> makeSlot t1 <*> makeSlot t2)
+      (:[]) <$> makeConstructor name ((\x y -> [x,y]) <$> makeSlot t1 <*> makeSlot t2)
     (TH.ForallC _ _ con) ->
-      makeConstructor con
-  where makeSlot (_,ty) = (Nothing,) <$> normalizeType ty
+      makeConstructors con
+#if MIN_VERSION_template_haskell(2,11,0)
+    TH.GadtC names slots _type ->
+      forM names $ \name ->
+        makeConstructor name (mapM makeSlot slots)
+    TH.RecGadtC names fields _type ->
+      forM names $ \name ->
+        makeConstructor name (mapM makeField fields)
+#endif
+  where makeConstructor name efields = Constructor (ValueConstructor name) <$> efields
+        makeSlot (_,ty) = (Nothing,) <$> normalizeType ty
         makeField (name,_,ty) =
           (Just (ValueVariable name),) <$> normalizeType ty
 
@@ -983,7 +1007,11 @@ getPresentInstances =
                TH.ClassI (TH.ClassD _ _ _ _ [TH.SigD method _]) instances ->
                  return (mapMaybe (\i ->
                                      case i of
+#if MIN_VERSION_template_haskell(2,11,0)
+                                       TH.InstanceD _moverlap _ (TH.AppT (TH.ConT _className) (TH.ConT typeName)) _ ->
+#else
                                        TH.InstanceD _ (TH.AppT (TH.ConT _className) (TH.ConT typeName)) _ ->
+#endif
                                          Just (TypeConstructor typeName
                                               ,ValueVariable method)
                                        _ -> Nothing)
@@ -1054,8 +1082,12 @@ presentName name =
   do result <- tryQ (TH.reify name)
      case result of
        Nothing -> fail "Name `it' isn't in scope."
-       Just (TH.VarI _ ty _ _) -> TH.appE (presentType (return ty))
-                                          (TH.varE name)
+#if MIN_VERSION_template_haskell(2,11,0)
+       Just (TH.VarI _ ty _) ->
+#else
+       Just (TH.VarI _ ty _ _) ->
+#endif
+         TH.appE (presentType (return ty)) (TH.varE name)
        _ -> fail "The name `it' isn't a variable."
   where tryQ m =
           TH.recover (pure Nothing)
