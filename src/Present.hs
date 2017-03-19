@@ -121,24 +121,24 @@ normalizeType = go
                          else NormalCons (TypeConstructor name))
             TH.TupleT i ->
               case lookup i tupleConstructors of
-                Nothing -> fail ("Tuple arity " ++ show i ++ " not supported.")
+                Nothing -> Left ("Tuple arity " ++ show i ++ " not supported.")
                 Just cons -> return (NormalCons (TypeConstructor cons))
             TH.ListT -> return (NormalCons (TypeConstructor ''[]))
-            TH.PromotedT _ -> fail "Promoted types are not supported."
-            TH.UnboxedTupleT _ -> fail "Unboxed tuples are not supported."
-            TH.ArrowT -> fail "The function arrow (->) is not supported."
-            TH.EqualityT -> fail "Equalities are not supported."
-            TH.PromotedTupleT _ -> fail "Promoted types are not supported."
-            TH.PromotedNilT -> fail "Promoted types are not supported."
-            TH.PromotedConsT -> fail "Promoted types are not supported."
-            TH.StarT -> fail "Star (*) is not supported."
-            TH.ConstraintT -> fail "Constraints are not supported."
-            TH.LitT _ -> fail "Type-level literals are not supported."
+            TH.PromotedT _ -> Left "Promoted types are not supported."
+            TH.UnboxedTupleT _ -> Left "Unboxed tuples are not supported."
+            TH.ArrowT -> Left "The function arrow (->) is not supported."
+            TH.EqualityT -> Left "Equalities are not supported."
+            TH.PromotedTupleT _ -> Left "Promoted types are not supported."
+            TH.PromotedNilT -> Left "Promoted types are not supported."
+            TH.PromotedConsT -> Left "Promoted types are not supported."
+            TH.StarT -> Left "Star (*) is not supported."
+            TH.ConstraintT -> Left "Constraints are not supported."
+            TH.LitT _ -> Left "Type-level literals are not supported."
 #if MIN_VERSION_template_haskell(2,11,0)
-            TH.InfixT{} -> fail "Infix type constructors are not supported."
-            TH.UInfixT{} -> fail "Unresolved infix type constructors are not supported."
-            TH.ParensT _ -> fail "Parenthesized types are not supported."
-            TH.WildCardT -> fail "Wildcard types are not supported."
+            TH.InfixT{} -> Left "Infix type constructors are not supported."
+            TH.UInfixT{} -> Left "Unresolved infix type constructors are not supported."
+            TH.ParensT _ -> Left "Parenthesized types are not supported."
+            TH.WildCardT -> Left "Wildcard types are not supported."
 #endif
 
 -- | Is the type a function?
@@ -340,11 +340,11 @@ reifyTypeDefinition typeConstructor@(TypeConstructor name) =
                    do ty' <- normalizeType ty
                       return (Just (TypeAliasDefinition typeConstructor
                                                         (TypeAlias (map toTypeVariable vars) ty')))
-                 _ -> fail "Not a supported data type declaration."
+                 _ -> Left "Not a supported data type declaration."
              TH.PrimTyConI{} -> return Nothing
-             TH.FamilyI{} -> fail "Data families not supported yet."
+             TH.FamilyI{} -> Left "Data families not supported yet."
              _ ->
-               fail ("Not a supported object, no type inside it: " ++
+               Left ("Not a supported object, no type inside it: " ++
                      TH.pprint info)
      case result of
        Left err -> fail err
