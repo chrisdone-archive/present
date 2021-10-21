@@ -28,7 +28,12 @@ module Present
   ,Present3(..)
   ,Present4(..)
   ,Present5(..)
-  ,Present6(..))
+  ,Present6(..)
+   -- * Internals
+  ,normalizeType
+  ,NormalType(..)
+  ,TypeConstructor(..)
+  )
   where
 
 import           Control.Arrow (second)
@@ -76,16 +81,17 @@ import qualified Language.Haskell.TH.Syntax as TH
 -- | A type variable.
 newtype TypeVariable =
   TypeVariable TH.Name
-  deriving (Eq)
+  deriving (Eq, Show)
 
 -- | A type constructor.
 newtype TypeConstructor =
   TypeConstructor TH.Name
-  deriving (Eq)
+  deriving (Eq, Show)
 
 -- | A primitive type constructor.
 newtype PrimitiveTypeConstructor =
   PrimitiveTypeConstructor TH.Name
+  deriving (Eq, Show)
 
 -- | A normalized type.
 data NormalType
@@ -95,6 +101,7 @@ data NormalType
   | NormalVar TypeVariable
   | NormalApp NormalType
               [NormalType]
+  deriving (Eq, Show)
 
 
 -- | Convert the heterogenous TH type into a more normal form.
