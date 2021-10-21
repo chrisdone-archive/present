@@ -1,5 +1,3 @@
-{-# LANGUAGE AutoDeriveTypeable #-}
-
 -- | Minimial inclusion of transformer's StateT library.
 --
 -- Copyright   :  (c) Andy Gill 2001,
@@ -96,7 +94,6 @@ instance (Monad m) => Monad (StateT s m) where
     m >>= k  = StateT $ \ s -> do
         (a, s') <- runStateT m s
         runStateT (k a) s'
-    fail str = StateT $ \ _ -> fail str
 
 instance (MonadPlus m) => MonadPlus (StateT s m) where
     mzero       = StateT $ \ _ -> mzero

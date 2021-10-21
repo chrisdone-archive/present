@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternGuards #-}
@@ -134,12 +133,14 @@ normalizeType = go
             TH.StarT -> Left "Star (*) is not supported."
             TH.ConstraintT -> Left "Constraints are not supported."
             TH.LitT _ -> Left "Type-level literals are not supported."
-#if MIN_VERSION_template_haskell(2,11,0)
             TH.InfixT{} -> Left "Infix type constructors are not supported."
             TH.UInfixT{} -> Left "Unresolved infix type constructors are not supported."
             TH.ParensT _ -> Left "Parenthesized types are not supported."
             TH.WildCardT -> Left "Wildcard types are not supported."
-#endif
+            TH.ForallVisT{} -> Left "Forall vis not supported."
+            TH.AppKindT{} -> Left "App kind not supported."
+            TH.UnboxedSumT{} -> Left "Unboxed sums not supported."
+            TH.ImplicitParamT{} -> Left "Unboxed sums not supported."
 
 -- | Is the type a function?
 isFunction :: TH.Type -> Bool
@@ -318,19 +319,11 @@ reifyTypeDefinition typeConstructor@(TypeConstructor name) =
            case info of
              TH.TyConI dec ->
                case dec of
-#if MIN_VERSION_template_haskell(2,11,0)
                  TH.DataD _cxt0 _ vars _mkind cons _cxt1 ->
-#else
-                 TH.DataD _cxt _ vars cons _deriving ->
-#endif
                    do cs <- concat <$> mapM makeConstructors cons
                       return (Just (DataTypeDefinition typeConstructor
                                                        (DataType (map toTypeVariable vars) cs)))
-#if MIN_VERSION_template_haskell(2,11,0)
                  TH.NewtypeD _cxt0 _ vars _mkind con _cxt1 ->
-#else
-                 TH.NewtypeD _cxt _ vars con _deriving ->
-#endif
                    do cs <- makeConstructors con
                       return (Just (DataTypeDefinition
                                       typeConstructor
@@ -370,14 +363,12 @@ makeConstructors =
       (:[]) <$> makeConstructor name ((\x y -> [x,y]) <$> makeSlot t1 <*> makeSlot t2)
     (TH.ForallC _ _ con) ->
       makeConstructors con
-#if MIN_VERSION_template_haskell(2,11,0)
     TH.GadtC names slots _type ->
       forM names $ \name ->
         makeConstructor name (mapM makeSlot slots)
     TH.RecGadtC names fields _type ->
       forM names $ \name ->
         makeConstructor name (mapM makeField fields)
-#endif
   where makeConstructor name efields = Constructor (ValueConstructor name) <$> efields
         makeSlot (_,ty) = (Nothing,) <$> normalizeType ty
         makeField (name,_,ty) =
@@ -910,38 +901,52 @@ intPrinter mautomaticPrinter name =
 expressType
   :: [TypeVariable] -> NormalType -> TH.Q TH.Exp
 expressType = go 0
-  where go arity typeVariables =
-          \case
-            NormalVar ty ->
-              if elem ty typeVariables
-                 then TH.varE (presentVarName ty)
-                 else return (presentUnknownVar ty arity)
-            NormalCons cons -> TH.varE (presentConsName cons)
-            NormalPrimitive (PrimitiveTypeConstructor typeConstructorName) ->
-              expressPrimitive typeConstructorName
-            NormalFunction ty ->
-              return (TH.TupE [TH.LitE (TH.StringL (TH.pprint ty))
-                              ,TH.LamE [TH.WildP]
-                                       (TH.AppE (TH.ConE 'FunctionValue)
-                                                (TH.LitE (TH.StringL (TH.pprint ty))))])
-            NormalApp f args ->
-              foldl TH.appE
-                    (go (length args) typeVariables f)
-                    (map (go 0 typeVariables) args)
+  where
+    go arity typeVariables =
+      \case
+        NormalVar ty ->
+          if elem ty typeVariables
+            then TH.varE (presentVarName ty)
+            else return (presentUnknownVar ty arity)
+        NormalCons cons -> TH.varE (presentConsName cons)
+        NormalPrimitive (PrimitiveTypeConstructor typeConstructorName) ->
+          expressPrimitive typeConstructorName
+        NormalFunction ty ->
+          return
+            (TH.TupE
+               [ Just (TH.LitE (TH.StringL (TH.pprint ty)))
+               , Just
+                   (TH.LamE
+                      [TH.WildP]
+                      (TH.AppE
+                         (TH.ConE 'FunctionValue)
+                         (TH.LitE (TH.StringL (TH.pprint ty)))))
+               ])
+        NormalApp f args ->
+          foldl
+            TH.appE
+            (go (length args) typeVariables f)
+            (map (go 0 typeVariables) args)
 
 -- | Express a primitive printer.
 expressPrimitive :: TH.Name -> TH.Q TH.Exp
-expressPrimitive typeConstructorName =
-  do info <- TH.reify typeConstructorName
-     case info of
-       TH.PrimTyConI _ arity _unlifted ->
-         return (ignoreTypeVariables
-                   arity
-                   (TH.TupE [TH.LitE (TH.StringL (TH.pprint typeConstructorName))
-                            ,TH.LamE [TH.WildP]
-                                     (TH.AppE (TH.ConE 'PrimitiveValue)
-                                              (TH.LitE (TH.StringL (TH.pprint typeConstructorName))))]))
-       _ -> fail ("Mistaken primitive type: " ++ TH.pprint typeConstructorName)
+expressPrimitive typeConstructorName = do
+  info <- TH.reify typeConstructorName
+  case info of
+    TH.PrimTyConI _ arity _unlifted ->
+      return
+        (ignoreTypeVariables
+           arity
+           (TH.TupE
+              [ Just (TH.LitE (TH.StringL (TH.pprint typeConstructorName)))
+              , Just
+                  (TH.LamE
+                     [TH.WildP]
+                     (TH.AppE
+                        (TH.ConE 'PrimitiveValue)
+                        (TH.LitE (TH.StringL (TH.pprint typeConstructorName)))))
+              ]))
+    _ -> fail ("Mistaken primitive type: " ++ TH.pprint typeConstructorName)
 
 -- | Name for a function name for presenting a type variable of a data
 -- type.
@@ -950,10 +955,15 @@ presentUnknownVar
 presentUnknownVar (TypeVariable ty) arity =
   ignoreTypeVariables
     arity
-    (TH.TupE [TH.LitE (TH.StringL (TH.pprint ty))
-             ,TH.LamE [TH.WildP]
-                      (TH.AppE (TH.ConE 'TypeVariableValue)
-                               (TH.LitE (TH.StringL (TH.pprint ty))))])
+    (TH.TupE
+       [ Just (TH.LitE (TH.StringL (TH.pprint ty)))
+       , Just
+           (TH.LamE
+              [TH.WildP]
+              (TH.AppE
+                 (TH.ConE 'TypeVariableValue)
+                 (TH.LitE (TH.StringL (TH.pprint ty)))))
+       ])
 
 -- | Given the arity, make a lambda of that arity and ignore all the
 -- paramters.
@@ -994,29 +1004,27 @@ normalizeName x = concatMap replace (show x)
 -- Present, Present1, etc.
 getPresentInstances
   :: TH.Q [(TypeConstructor,ValueVariable)]
-getPresentInstances =
-  do p0 <- getFor ''Present0
-     p1 <- getFor ''Present1
-     p2 <- getFor ''Present2
-     p3 <- getFor ''Present3
-     p4 <- getFor ''Present4
-     return (concat [p0,p1,p2,p3,p4])
-  where getFor cls =
-          do result <- TH.reify cls
-             case result of
-               TH.ClassI (TH.ClassD _ _ _ _ [TH.SigD method _]) instances ->
-                 return (mapMaybe (\i ->
-                                     case i of
-#if MIN_VERSION_template_haskell(2,11,0)
-                                       TH.InstanceD _moverlap _ (TH.AppT (TH.ConT _className) (TH.ConT typeName)) _ ->
-#else
-                                       TH.InstanceD _ (TH.AppT (TH.ConT _className) (TH.ConT typeName)) _ ->
-#endif
-                                         Just (TypeConstructor typeName
-                                              ,ValueVariable method)
-                                       _ -> Nothing)
-                                  instances)
-               _ -> return []
+getPresentInstances = do
+  p0 <- getFor ''Present0
+  p1 <- getFor ''Present1
+  p2 <- getFor ''Present2
+  p3 <- getFor ''Present3
+  p4 <- getFor ''Present4
+  return (concat [p0, p1, p2, p3, p4])
+  where
+    getFor cls = do
+      result <- TH.reify cls
+      case result of
+        TH.ClassI (TH.ClassD _ _ _ _ [TH.SigD method _]) instances ->
+          return
+            (mapMaybe
+               (\i ->
+                  case i of
+                    TH.InstanceD _moverlap _ (TH.AppT (TH.ConT _className) (TH.ConT typeName)) _ ->
+                      Just (TypeConstructor typeName, ValueVariable method)
+                    _ -> Nothing)
+               instances)
+        _ -> return []
 
 class Present0 a  where
   present0 :: (String,a -> Value)
@@ -1078,20 +1086,14 @@ presentIt = presentName (TH.mkName "it")
 
 -- | Make a presenter for the name
 presentName :: TH.Name -> TH.Q TH.Exp
-presentName name =
-  do result <- tryQ (TH.reify name)
-     case result of
-       Nothing -> fail "Name `it' isn't in scope."
-#if MIN_VERSION_template_haskell(2,11,0)
-       Just (TH.VarI _ ty _) ->
-#else
-       Just (TH.VarI _ ty _ _) ->
-#endif
-         TH.appE (presentType (return ty)) (TH.varE name)
-       _ -> fail "The name `it' isn't a variable."
-  where tryQ m =
-          TH.recover (pure Nothing)
-                     (fmap Just m)
+presentName name = do
+  result <- tryQ (TH.reify name)
+  case result of
+    Nothing -> fail "Name `it' isn't in scope."
+    Just (TH.VarI _ ty _) -> TH.appE (presentType (return ty)) (TH.varE name)
+    _ -> fail "The name `it' isn't a variable."
+  where
+    tryQ m = TH.recover (pure Nothing) (fmap Just m)
 
 -- | Present the value with the given type.
 presentType :: TH.Q TH.Type -> TH.Q TH.Exp
