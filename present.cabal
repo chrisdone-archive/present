@@ -1,5 +1,5 @@
 name:                present
-version:             4.1.0
+version:             4.2.0
 synopsis:            Make presentations for data types.
 description:         Make presentations for data types.
 homepage:            https://github.com/chrisdone/present
@@ -7,7 +7,7 @@ license:             BSD3
 license-file:        LICENSE
 author:              Chris Done
 maintainer:          chrisdone@gmail.com
-copyright:           2016 Chris Done
+copyright:           2016-2021 Chris Done
 category:            Development
 build-type:          Simple
 cabal-version:       >=1.8
@@ -15,8 +15,8 @@ extra-source-files: README.md
 
 library
   hs-source-dirs:    src/
-  ghc-options:       -Wall -O2
+  ghc-options:       -Wall
   exposed-modules:   Present
-  other-modules:     Control.Monad.Trans.State.Strict
   build-depends:     base >= 4 && <5
                    , template-haskell
+                   , transformers
