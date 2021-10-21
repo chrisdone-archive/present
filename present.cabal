@@ -25,5 +25,5 @@ test-suite present-test
   type: exitcode-stdio-1.0
   hs-source-dirs: test/
   main-is: Main.hs
-  other-modules: NormalizeSpec
-  build-depends: base, hspec, present, template-haskell, th-lift
+  other-modules: NormalizeSpec, Lifts
+  build-depends: base, hspec, present, template-haskell, th-lift, transformers

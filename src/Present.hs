@@ -120,6 +120,7 @@ normalizeType = go
                  then return (NormalFunction ty)
                  else go (typeClassDefaulting context ty)
             TH.SigT ty _kind -> go ty
+            -- Oh, crap. I don't know the type of the type variable here. We're screwed.
             TH.VarT name -> return (NormalVar (TypeVariable name))
             TH.ConT name ->
               return (if isPrimitiveType name
