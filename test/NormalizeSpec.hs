@@ -4,21 +4,21 @@
 
 module NormalizeSpec where
 
-import Language.Haskell.TH.Syntax
 import Present
 import Test.Hspec
+import Lifts
 
 spec :: SpecWith ()
 spec = do
   it
     "Int"
     (shouldBe
-       (normalizeType (ConT ''Int))
+       (normalizeType $(lifted [t|Int|]))
        (Right (NormalCons (TypeConstructor ''Int))))
   it
     "Maybe Int"
     (shouldBe
-       (normalizeType (AppT (ConT ''Maybe) (ConT ''Int)))
+       (normalizeType $(lifted [t|Maybe Int|]))
        (Right
           (NormalApp
              (NormalCons (TypeConstructor ''Maybe))
